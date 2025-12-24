@@ -209,7 +209,7 @@ export function Large({ children, className, ...props }: TypographyProps & React
 }
 
 // Small text
-export function Small({ children, className, ...props }: TypographyProps & React.HTMLAttributes<HTMLSmallElement>) {
+export function Small({ children, className, ...props }: TypographyProps & React.HTMLAttributes<HTMLElement>) {
   return (
     <small className={cn("text-sm font-medium leading-none", className)} {...props}>
       {children}
