@@ -11,10 +11,16 @@ import { ChartBarPreferences } from "@/components/ui/chart-bar-preferences"
 import { NearbyAmenities } from "@/components/nearby-amenities"
 import { ScoreGauge } from "@/components/ui/score-gauge"
 import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 
 export default function ResultsPage() {
   const searchParams = useSearchParams()
   const [isScrolled, setIsScrolled] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -1617,20 +1623,32 @@ export default function ResultsPage() {
   // Get total score for the gauge
   const totalScore = calculateTotalScore()
 
+  // Score Gauge rendered via portal to document.body to ensure fixed positioning
+  const scoreGaugeElement = mounted && typeof window !== 'undefined' && totalScore !== null ? (
+    createPortal(
+      <div 
+        style={{ 
+          position: 'fixed', 
+          zIndex: 9999, 
+          right: '21rem', 
+          top: '5.67rem',
+          pointerEvents: 'auto'
+        }}
+      >
+        <ScoreGauge 
+          score={totalScore} 
+          maxScore={999} 
+          animated={true} 
+        />
+      </div>,
+      document.body
+    )
+  ) : null
+
   return (
     <div className="min-h-screen bg-white" style={{ backgroundColor: '#FFFFFF' }}>
       <Navbar isScrolled={isScrolled} />
-
-      {/* Score Gauge in top right corner */}
-      <div className="fixed top-20 z-40" style={{ zIndex: 40, right: 'calc(2rem * 3.6)' }}>
-        {totalScore !== null && (
-          <ScoreGauge 
-            score={totalScore} 
-            maxScore={999} 
-            animated={true} 
-          />
-        )}
-      </div>
+      {scoreGaugeElement}
 
       <div className="container mx-auto px-6 py-12">
         <div className="mx-auto" style={{ maxWidth: '1357px' }}>

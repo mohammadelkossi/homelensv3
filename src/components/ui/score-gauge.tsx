@@ -8,7 +8,7 @@ interface ScoreGaugeProps {
   animated?: boolean
 }
 
-const COLORS = ["#CFDEE7", "#92B4F4", "#5E7CE2", "#4472CA", "#0A369D"]
+const COLORS: string[] = ["#CFDEE7", "#B80C09", "#FAF33E", "#9BC53D", "#38943E"]
 
 export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaugeProps) {
   const [displayScore, setDisplayScore] = useState(animated ? 0 : score)
@@ -60,8 +60,8 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
     return COLORS[index]
   }
 
-  const size = 280
-  const strokeWidth = 24
+  const size = 400
+  const strokeWidth = 34
   const radius = (size - strokeWidth) / 2
   const innerRadius = radius - strokeWidth / 2
   const outerRadius = radius + strokeWidth / 2
@@ -100,7 +100,9 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
   const segments = COLORS.map((color, index) => {
     const startAngle = 180 + index * segmentAngle
     const endAngle = 180 + (index + 1) * segmentAngle
-    return { color, startAngle, endAngle }
+    // Force update: last color is #38943E
+    const finalColor = index === 4 ? "#38943E" : color
+    return { color: finalColor, startAngle, endAngle }
   })
 
   return (
@@ -120,8 +122,8 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
       </svg>
 
       {/* Score display */}
-      <div className="absolute inset-0 flex flex-col items-center justify-end pb-2">
-        <span className="text-6xl font-bold tabular-nums" style={{ color: getScoreColor() }}>
+      <div className="absolute inset-0 flex flex-col items-center justify-end pb-2" style={{ transform: 'translateY(-15%)' }}>
+        <span className="font-bold tabular-nums" style={{ color: '#0A369D', fontSize: '4.528125rem' }}>
           {displayScore}
         </span>
         <span className="text-sm text-muted-foreground mt-1">{getScoreLabel()}</span>
