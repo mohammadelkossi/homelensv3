@@ -8,7 +8,7 @@ interface ScoreGaugeProps {
   animated?: boolean
 }
 
-const COLORS: string[] = ["#CFDEE7", "#B80C09", "#FAF33E", "#9BC53D", "#38943E"]
+const COLORS: string[] = ["#CFDEE7", "#B80C09", "#FAF33E", "#9BC53D", "#38943e"]
 
 export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaugeProps) {
   const [displayScore, setDisplayScore] = useState(animated ? 0 : score)
@@ -45,19 +45,51 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
     requestAnimationFrame(animate)
   }, [clampedScore, animated])
 
-  // Calculate which segment the score falls into
+  // Calculate which segment the score falls into based on score value
   const getScoreLabel = () => {
-    if (percentage < 0.2) return "Poor"
-    if (percentage < 0.4) return "Fair"
-    if (percentage < 0.6) return "Good"
-    if (percentage < 0.8) return "Very Good"
-    return "Excellent"
+    if (clampedScore >= 0 && clampedScore <= 200) {
+      return "Poor"
+    }
+    if (clampedScore >= 201 && clampedScore <= 399) {
+      return "Below Average"
+    }
+    if (clampedScore >= 400 && clampedScore <= 600) {
+      return "Average"
+    }
+    if (clampedScore >= 601 && clampedScore <= 800) {
+      return "Very Good"
+    }
+    if (clampedScore >= 801 && clampedScore <= 999) {
+      return "Excellent!"
+    }
+    return "Poor" // Default fallback
   }
 
   // Get the color for the current score
   const getScoreColor = () => {
     const index = Math.min(Math.floor(percentage * 5), 4)
     return COLORS[index]
+  }
+
+  // Get the color for the number based on score value
+  const getNumberColor = (): string => {
+    if (clampedScore >= 0 && clampedScore <= 200) {
+      return '#CFDEE7'
+    }
+    if (clampedScore >= 201 && clampedScore <= 400) {
+      return '#B80C09'
+    }
+    if (clampedScore >= 401 && clampedScore <= 600) {
+      return '#FAF33E'
+    }
+    if (clampedScore >= 601 && clampedScore <= 800) {
+      return '#9BC53D'
+    }
+    if (clampedScore >= 801 && clampedScore <= 999) {
+      return '#38943e'
+    }
+    // Default fallback
+    return '#0A369D'
   }
 
   const size = 400
@@ -100,8 +132,8 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
   const segments = COLORS.map((color, index) => {
     const startAngle = 180 + index * segmentAngle
     const endAngle = 180 + (index + 1) * segmentAngle
-    // Force update: last color is #38943E
-    const finalColor = index === 4 ? "#38943E" : color
+    // Force update: last color is #38943e
+    const finalColor = index === 4 ? "#38943e" : color
     return { color: finalColor, startAngle, endAngle }
   })
 
@@ -123,7 +155,7 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
 
       {/* Score display */}
       <div className="absolute inset-0 flex flex-col items-center justify-end pb-2" style={{ transform: 'translateY(-15%)' }}>
-        <span className="font-bold tabular-nums" style={{ color: '#0A369D', fontSize: '4.528125rem' }}>
+        <span className="font-bold tabular-nums" style={{ color: getNumberColor(), fontSize: '4.528125rem' }}>
           {displayScore}
         </span>
         <span className="text-sm text-muted-foreground mt-1">{getScoreLabel()}</span>

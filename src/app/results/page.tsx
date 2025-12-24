@@ -510,6 +510,47 @@ export default function ResultsPage() {
     return `£${Math.round(pricePerSqm).toLocaleString()}/m²`
   }
 
+  // Get numeric price per sqm value
+  const getPricePerSqmNumber = (): number | null => {
+    const price = parsePrice(propertyData.price)
+    if (!price) return null
+    
+    const areaStr = propertyData.area
+    if (!areaStr || areaStr === 'N/A') return null
+    
+    const cleanedArea = areaStr.replace(/m²/g, '').replace(/m\^2/g, '').trim()
+    const area = parseFloat(cleanedArea)
+    
+    if (!area || isNaN(area) || area <= 0) return null
+    
+    return price / area
+  }
+
+  // Determine color for Price/square metre based on comparison with Average
+  const getPricePerSqmColor = (): string => {
+    const propertyPricePerSqm = getPricePerSqmNumber()
+    if (propertyPricePerSqm === null || averagePricePerSqm === null) {
+      return '#0A369D' // Default color
+    }
+
+    const difference = propertyPricePerSqm - averagePricePerSqm
+
+    // More than £50 higher than average: red
+    if (difference > 50) {
+      return '#B80C09'
+    }
+    // More than £150 lower than average: dark green
+    if (difference < -150) {
+      return '#38943e'
+    }
+    // Between £50-150 lower than average: light green
+    if (difference >= -150 && difference < -50) {
+      return '#9BC53D'
+    }
+    // Within £50 (higher or lower): yellow
+    return '#FAF33E'
+  }
+
   // Calculate CAGR (Compound Annual Growth Rate)
   const calculateCAGR = (): string => {
     // If no price history, return N/A
@@ -589,6 +630,67 @@ export default function ResultsPage() {
     } catch (e) {
       return null
     }
+  }
+
+  // Determine color for Days on market based on number of days
+  const getDaysOnMarketColor = (): string => {
+    const days = getDaysOnMarketNumber()
+    if (days === null) {
+      return '#0A369D' // Default color
+    }
+
+    // 0-30 days: dark green
+    if (days >= 0 && days <= 30) {
+      return '#38943e'
+    }
+    // 31-44 days: light green
+    if (days >= 31 && days <= 44) {
+      return '#9BC53D'
+    }
+    // 45-60 days: yellow
+    if (days >= 45 && days <= 60) {
+      return '#FAF33E'
+    }
+    // 60+ days: red
+    if (days > 60) {
+      return '#B80C09'
+    }
+    return '#0A369D' // Default fallback
+  }
+
+  // Get number of sales as a number
+  const getSalesCountNumber = (): number | null => {
+    if (propertyData.salesCountPast12Months === null || propertyData.salesCountPast12Months === 'N/A') {
+      return null
+    }
+    const salesCount = parseInt(propertyData.salesCountPast12Months)
+    return isNaN(salesCount) ? null : salesCount
+  }
+
+  // Determine color for Number of sales based on sales count
+  const getSalesCountColor = (): string => {
+    const salesCount = getSalesCountNumber()
+    if (salesCount === null) {
+      return '#0A369D' // Default color
+    }
+
+    // 0 sales: dark green
+    if (salesCount === 0) {
+      return '#38943e'
+    }
+    // 1 sale: light green
+    if (salesCount === 1) {
+      return '#9BC53D'
+    }
+    // 2 sales: yellow
+    if (salesCount === 2) {
+      return '#FAF33E'
+    }
+    // 3+ sales: red
+    if (salesCount >= 3) {
+      return '#B80C09'
+    }
+    return '#0A369D' // Default fallback
   }
 
   // Calculate DOM score based on days on market
@@ -812,6 +914,29 @@ export default function ResultsPage() {
     
     const value = parseFloat(match[1])
     return isNaN(value) ? null : value
+  }
+
+  // Determine color for Average % growth/year based on growth percentage
+  const getCAGRColor = (): string => {
+    const growthPercent = getCAGRNumber()
+    if (growthPercent === null) {
+      return '#0A369D' // Default color
+    }
+
+    // Negative growth: red
+    if (growthPercent < 0) {
+      return '#B80C09'
+    }
+    // 4.00001% and above: dark green
+    if (growthPercent > 4.00001) {
+      return '#38943e'
+    }
+    // 2.00001-4%: light green
+    if (growthPercent >= 2.00001 && growthPercent <= 4) {
+      return '#9BC53D'
+    }
+    // 0-2%: yellow
+    return '#FAF33E'
   }
 
   // Calculate PGPY score based on Average % growth/year
@@ -1661,7 +1786,7 @@ export default function ResultsPage() {
           <div className="flex mb-8 w-full" style={{ marginTop: 'calc(1rem + 5%)', gap: '1rem', marginLeft: '3%' }}>
             <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Price/square metre</div>
-              <div className="text-3xl font-black" style={{ color: '#0A369D', fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculatePricePerSqm()}</div>
+              <div className="text-3xl font-black" style={{ color: getPricePerSqmColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculatePricePerSqm()}</div>
               <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>{propertyData.propertyAddress}</div>
             </div>
             <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
@@ -1671,17 +1796,17 @@ export default function ResultsPage() {
             </div>
             <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Average % growth/year</div>
-              <div className="text-3xl font-black" style={{ color: '#0A369D', fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculateCAGR()}</div>
+              <div className="text-3xl font-black" style={{ color: getCAGRColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculateCAGR()}</div>
               <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>{propertyData.propertyAddress}</div>
             </div>
             <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem', height: '1.25rem', lineHeight: '1.25rem', opacity: '0' }}>&nbsp;</div>
-              <div className="text-3xl font-black" style={{ color: '#0A369D', fontWeight: '900', marginTop: 'calc(0.3rem + 0.5%)', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculateDaysOnMarket()}</div>
+              <div className="text-3xl font-black" style={{ color: getDaysOnMarketColor(), fontWeight: '900', marginTop: 'calc(0.3rem + 0.5%)', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculateDaysOnMarket()}</div>
               <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>Days on market</div>
             </div>
             <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem', minHeight: '1.25rem' }}>&nbsp;</div>
-              <div className="text-3xl font-black" style={{ color: '#0A369D', fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{propertyData.salesCountPast12Months !== null ? propertyData.salesCountPast12Months : 'N/A'}</div>
+              <div className="text-3xl font-black" style={{ color: getSalesCountColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{propertyData.salesCountPast12Months !== null ? propertyData.salesCountPast12Months : 'N/A'}</div>
               <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>Number of sales in {propertyData.houseFullPostcode || 'N/A'} over past year</div>
             </div>
           </div>
