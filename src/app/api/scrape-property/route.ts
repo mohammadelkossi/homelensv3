@@ -811,6 +811,7 @@ export async function POST(request: NextRequest) {
       longitude: propertyData.coordinates?.longitude?.toString() || 'N/A',
       preferredLatitude: postcodeCoords.latitude?.toString() || null,
       preferredLongitude: postcodeCoords.longitude?.toString() || null,
+      preferredPostcode: postcode || null,
       distance: distance !== null ? distance.toFixed(2) : null,
       houseFullPostcode: housePostcode.fullPostcode,
       houseOutcode: housePostcode.outcode,

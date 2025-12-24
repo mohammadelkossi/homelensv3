@@ -8,7 +8,8 @@ interface ScoreGaugeProps {
   animated?: boolean
 }
 
-const COLORS: string[] = ["#CFDEE7", "#B80C09", "#FAF33E", "#9BC53D", "#38943e"]
+const COLORS: string[] = ["#CFDEE7", "#B80C09", "#FAF33E", "#9BC53D", "#38943E"]
+// Ensure rightmost color (index 4) is dark green #38943E
 
 export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaugeProps) {
   const [displayScore, setDisplayScore] = useState(animated ? 0 : score)
@@ -60,7 +61,7 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
       return "Very Good"
     }
     if (clampedScore >= 801 && clampedScore <= 999) {
-      return "Excellent!"
+      return "" // Removed "Excellent!"
     }
     return "Poor" // Default fallback
   }
@@ -86,7 +87,7 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
       return '#9BC53D'
     }
     if (clampedScore >= 801 && clampedScore <= 999) {
-      return '#38943e'
+      return '#38943E'
     }
     // Default fallback
     return '#0A369D'
@@ -132,33 +133,38 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
   const segments = COLORS.map((color, index) => {
     const startAngle = 180 + index * segmentAngle
     const endAngle = 180 + (index + 1) * segmentAngle
-    // Force update: last color is #38943e
-    const finalColor = index === 4 ? "#38943e" : color
+    // Force rightmost segment (index 4) to be dark green #38943E
+    const finalColor = index === 4 ? "#38943E" : color
     return { color: finalColor, startAngle, endAngle }
   })
 
   return (
     <div className="relative" style={{ width: size, height: size / 2 + 40 }}>
       <svg width={size} height={size / 2 + 40} viewBox={`0 0 ${size} ${size / 2 + 40}`} className="overflow-visible">
-        {segments.map((segment, index) => (
-          <path
-            key={index}
-            d={createWedge(segment.startAngle, segment.endAngle)}
-            fill={segment.color}
-            className="transition-opacity duration-300"
-            style={{
-              opacity: percentage * 5 > index ? 1 : 0.3,
-            }}
-          />
-        ))}
+        {segments.map((segment, index) => {
+          // Always use dark green #38943E for the rightmost segment (index 4), regardless of score
+          const isRightmost = index === 4
+          const fillColor = isRightmost ? "#38943E" : segment.color
+          return (
+            <path
+              key={index}
+              d={createWedge(segment.startAngle, segment.endAngle)}
+              fill={isRightmost ? "#38943E" : fillColor}
+              className="transition-opacity duration-300"
+              style={{
+                opacity: percentage * 5 > index ? 1 : 0.3,
+                fill: isRightmost ? "#38943E" : fillColor, // Force dark green #38943E for rightmost segment always
+              }}
+            />
+          )
+        })}
       </svg>
 
       {/* Score display */}
       <div className="absolute inset-0 flex flex-col items-center justify-end pb-2" style={{ transform: 'translateY(-15%)' }}>
-        <span className="font-bold tabular-nums" style={{ color: getNumberColor(), fontSize: '4.528125rem' }}>
+        <span className="font-bold tabular-nums" style={{ color: getNumberColor(), fontSize: '4.75453125rem' }}>
           {displayScore}
         </span>
-        <span className="text-sm text-muted-foreground mt-1">{getScoreLabel()}</span>
       </div>
     </div>
   )

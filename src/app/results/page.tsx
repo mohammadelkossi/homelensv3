@@ -6,12 +6,10 @@ import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ChartLineLabel } from "@/components/ui/chart-line-label"
-import { ChartRadarPreferences } from "@/components/ui/chart-radar-preferences"
 import { ChartBarPreferences } from "@/components/ui/chart-bar-preferences"
 import { NearbyAmenities } from "@/components/nearby-amenities"
 import { ScoreGauge } from "@/components/ui/score-gauge"
 import { useState, useEffect } from "react"
-import { createPortal } from "react-dom"
 
 export default function ResultsPage() {
   const searchParams = useSearchParams()
@@ -371,13 +369,9 @@ export default function ResultsPage() {
   // Generate preference cards data
   const getPreferenceCards = () => {
     const categories = [
-      { key: 'bedrooms', label: 'Bedrooms', actual: propertyData.bedrooms, preferred: userSelections.bedrooms },
-      { key: 'bathrooms', label: 'Bathrooms', actual: propertyData.bathrooms, preferred: userSelections.bathrooms },
-      { key: 'propertyType', label: 'Property Type', actual: propertyData.propertyType, preferred: userSelections.propertyType },
-      { key: 'size', label: 'Size', actual: propertyData.area, preferred: userSelections.size },
       { key: 'garden', label: 'Garden', actual: propertyData.garden, preferred: null },
       { key: 'parking', label: 'Parking', actual: propertyData.parking, preferred: null },
-      { key: 'location', label: 'Location', actual: propertyData.houseFullPostcode || propertyData.houseOutcode, preferred: propertyData.houseFullPostcode || null },
+      { key: 'location', label: 'Distance', actual: propertyData.distance && propertyData.distance !== 'null' && propertyData.distance !== 'N/A' ? `${parseFloat(propertyData.distance).toFixed(2)} km` : 'N/A', preferred: propertyData.houseFullPostcode || null },
       { key: 'garage', label: 'Garage', actual: propertyData.garage, preferred: null },
     ]
 
@@ -386,7 +380,34 @@ export default function ResultsPage() {
       const score = preferenceScores[category.key as keyof typeof preferenceScores]
       const importance = score && score !== 'null' ? parseInt(score) : 0
       
-      // Determine card color based on match percentage
+      // For garden, parking, and garage: determine color based on Yes/No
+      const isYesNoCategory = category.key === 'garden' || category.key === 'parking' || category.key === 'garage'
+      const isYes = isYesNoCategory && category.actual && (category.actual.toString().toLowerCase() === 'yes' || category.actual.toString().toLowerCase() === 'true')
+      
+      // For Distance: determine color based on distance value
+      let backgroundColor = '#d1fae5' // Default green
+      if (category.key === 'location') {
+        const distanceStr = category.actual?.toString().replace(' km', '') || ''
+        const distance = parseFloat(distanceStr)
+        if (!isNaN(distance)) {
+          if (distance < 10) {
+            backgroundColor = '#d1fae5' // Green
+          } else if (distance >= 10 && distance <= 50) {
+            backgroundColor = '#fef3c7' // Yellow
+          } else if (distance > 50) {
+            backgroundColor = '#fee2e2' // Light red
+          }
+        }
+      } else if (isYesNoCategory) {
+        backgroundColor = isYes ? '#d1fae5' : '#fef3c7' // Green for Yes, yellow for No
+      } else {
+        // For other categories (not currently used)
+        const isGoodMatch = matchPercentage >= 70
+        const isWeakMatch = matchPercentage < 50
+        backgroundColor = isGoodMatch ? '#d1fae5' : isWeakMatch ? '#fef3c7' : '#d1fae5'
+      }
+      
+      // Determine card color based on match percentage (for progress colors)
       const isGoodMatch = matchPercentage >= 70
       const isWeakMatch = matchPercentage < 50
       
@@ -394,9 +415,10 @@ export default function ResultsPage() {
         ...category,
         matchPercentage,
         importance,
-        backgroundColor: isGoodMatch ? '#d1fae5' : isWeakMatch ? '#fef3c7' : '#d1fae5', // Light green or light yellow
+        backgroundColor,
         progressColor: isGoodMatch ? '#22c55e' : isWeakMatch ? '#f59e0b' : '#22c55e', // Green or orange
         matchBubbleColor: isGoodMatch ? '#22c55e' : isWeakMatch ? '#f59e0b' : '#22c55e',
+        isYes: isYesNoCategory ? isYes : null,
       }
     })
   }
@@ -1300,6 +1322,7 @@ export default function ResultsPage() {
   }
 
   // Calculate Total Score (Market Metrics) as sum of PPQM, DOM, PGPY, PCT, and NOS
+  // If a value is missing, scale remaining scores from 100 to 125 (multiply by 1.25)
   const calculateTotalMarketMetricsScore = (): number | null => {
     const ppqmScore = calculatePPQMScore()
     const domScore = calculateDOMScore()
@@ -1307,15 +1330,23 @@ export default function ResultsPage() {
     const pctScore = calculatePCTScore()
     const nosScore = calculateNOSScore()
 
-    // If any score is null, return null (can't calculate total)
-    if (ppqmScore === null || domScore === null || pgpyScore === null || pctScore === null || nosScore === null) {
+    const scores = [ppqmScore, domScore, pgpyScore, pctScore, nosScore]
+    const availableScores = scores.filter(score => score !== null) as number[]
+    const missingCount = scores.length - availableScores.length
+
+    if (availableScores.length === 0) {
       return null
     }
 
-    return ppqmScore + domScore + pgpyScore + pctScore + nosScore
+    // If any value is missing, scale remaining scores from 100 to 125 (multiply by 1.25)
+    const scaleFactor = missingCount > 0 ? 1.25 : 1.0
+    const scaledSum = availableScores.reduce((sum, score) => sum + (score * scaleFactor), 0)
+
+    return Math.round(scaledSum)
   }
 
-  // Calculate weights total as sum of all 8 preference scores
+  // Calculate weights total as sum of all available preference scores
+  // Exclude missing preferences from the calculation
   const calculateWeightsTotal = (): number | null => {
     const scores = [
       preferenceScores.bedrooms,
@@ -1461,7 +1492,8 @@ export default function ResultsPage() {
     return weightedLocation * lScore
   }
 
-  // Calculate MS Totals = sum of all MS values
+  // Calculate MS Totals = sum of all available MS values
+  // Exclude missing preferences from the calculation (don't include null values)
   const calculateMSTotals = (): number | null => {
     const bdrMS = calculateBDRMS()
     const btrMS = calculateBTRMS()
@@ -1472,13 +1504,15 @@ export default function ResultsPage() {
     const pkMS = calculatePKMS()
     const lMS = calculateLMS()
 
-    // If any value is null, return null
-    if (bdrMS === null || btrMS === null || ptMS === null || aMS === null || 
-        ggMS === null || gdMS === null || pkMS === null || lMS === null) {
+    // Only include non-null values in the sum
+    const msValues = [bdrMS, btrMS, ptMS, aMS, ggMS, gdMS, pkMS, lMS]
+    const availableValues = msValues.filter(val => val !== null) as number[]
+
+    if (availableValues.length === 0) {
       return null
     }
 
-    return bdrMS + btrMS + ptMS + aMS + ggMS + gdMS + pkMS + lMS
+    return availableValues.reduce((sum, val) => sum + val, 0)
   }
 
   // Calculate Total score (custom criteria) = MS Totals * 5
@@ -1487,19 +1521,16 @@ export default function ResultsPage() {
     if (msTotals === null) {
       return null
     }
-    return msTotals * 5
+    return Math.round(msTotals * 5)
   }
 
   // Calculate Total score = Total score (custom criteria) + Total score (Market Metrics)
+  // Treat null values as 0 to ensure score gauge always shows
   const calculateTotalScore = (): number | null => {
-    const customCriteriaScore = calculateTotalScoreCustomCriteria()
-    const marketMetricsScore = calculateTotalMarketMetricsScore()
+    const customCriteriaScore = calculateTotalScoreCustomCriteria() ?? 0
+    const marketMetricsScore = calculateTotalMarketMetricsScore() ?? 0
 
-    if (customCriteriaScore === null || marketMetricsScore === null) {
-      return null
-    }
-
-    return customCriteriaScore + marketMetricsScore
+    return Math.round(customCriteriaScore + marketMetricsScore)
   }
 
   // Calculate GG score based on garage value
@@ -1747,37 +1778,37 @@ export default function ResultsPage() {
 
   // Get total score for the gauge
   const totalScore = calculateTotalScore()
-
-  // Score Gauge rendered via portal to document.body to ensure fixed positioning
-  const scoreGaugeElement = mounted && typeof window !== 'undefined' && totalScore !== null ? (
-    createPortal(
-      <div 
-        style={{ 
-          position: 'fixed', 
-          zIndex: 9999, 
-          right: '21rem', 
-          top: '5.67rem',
-          pointerEvents: 'auto'
-        }}
-      >
-        <ScoreGauge 
-          score={totalScore} 
-          maxScore={999} 
-          animated={true} 
-        />
-      </div>,
-      document.body
-    )
-  ) : null
+  
+  // Check if debug mode is enabled
+  const debugParam = searchParams.get('debug')
+  const isDebugMode = debugParam === 'true' || debugParam === 'True' || debugParam === 'TRUE'
 
   return (
-    <div className="min-h-screen bg-white" style={{ backgroundColor: '#FFFFFF' }}>
+    <div className="min-h-screen bg-white" style={{ backgroundColor: '#FFFFFF', position: 'relative' }}>
       <Navbar isScrolled={isScrolled} />
-      {scoreGaugeElement}
+      
+      {/* Score Gauge - positioned absolutely within the page, scrolls with content */}
+      {mounted && totalScore !== null && (
+        <div 
+          style={{ 
+            position: 'absolute', 
+            zIndex: 40, 
+            right: '21rem', 
+            top: '5.67rem',
+            pointerEvents: 'auto'
+          }}
+        >
+          <ScoreGauge 
+            score={totalScore} 
+            maxScore={999} 
+            animated={true} 
+          />
+        </div>
+      )}
 
       <div className="container mx-auto px-6 py-12">
         <div className="mx-auto" style={{ maxWidth: '1357px' }}>
-          <h1 className="text-3xl font-bold" style={{ color: '#0A369D', marginLeft: '3%', marginTop: '5%', marginBottom: '0.84rem' }}>
+          <h1 className="text-3xl font-bold" style={{ color: '#0A369D', marginLeft: '3%', marginTop: '5%', marginBottom: '0.84rem', maxWidth: '50%', wordWrap: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
             {propertyData.propertyAddress}
           </h1>
           <h2 className="text-lg mb-8" style={{ color: '#4472CA', marginLeft: '3%', fontSize: 'calc(1em * 0.88)' }}>
@@ -1800,9 +1831,9 @@ export default function ResultsPage() {
               <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>{propertyData.propertyAddress}</div>
             </div>
             <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
-              <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem', height: '1.25rem', lineHeight: '1.25rem', opacity: '0' }}>&nbsp;</div>
-              <div className="text-3xl font-black" style={{ color: getDaysOnMarketColor(), fontWeight: '900', marginTop: 'calc(0.3rem + 0.5%)', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculateDaysOnMarket()}</div>
-              <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>Days on market</div>
+              <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Days on market</div>
+              <div className="text-3xl font-black" style={{ color: getDaysOnMarketColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculateDaysOnMarket()}</div>
+              <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>{propertyData.propertyAddress}</div>
             </div>
             <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem', minHeight: '1.25rem' }}>&nbsp;</div>
@@ -1901,7 +1932,7 @@ export default function ResultsPage() {
               </div>
             )
           })()}
-          <div className="rounded-lg px-6 py-4 mb-8" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '587.8656px', marginLeft: '3%', width: 'calc(5 * 17.97% + 4 * 1rem)', marginTop: '2rem', display: 'flex', flexDirection: 'column', paddingBottom: '2rem' }}>
+          <div className="rounded-lg px-6 py-4 mb-8" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '411.50592px', marginLeft: '3%', width: 'calc(5 * 17.97% + 4 * 1rem)', marginTop: '2rem', display: 'flex', flexDirection: 'column', paddingBottom: '2rem' }}>
             <h2 className="text-2xl font-bold" style={{ color: '#0A369D', marginLeft: '3.5%', marginTop: '2rem', paddingTop: '1rem', fontSize: 'calc(1.5rem * 1.04)' }}>Preferences</h2>
             
             {/* Strong Matches Section */}
@@ -1912,11 +1943,13 @@ export default function ResultsPage() {
                   {strongMatches.map((match, index) => {
                     let displayText = ''
                     if (match.label === 'Size') {
-                      displayText = `Property size: ${match.propertyValue}`
+                      displayText = `Size: ${match.propertyValue} m²`
                     } else if (match.label === 'Property Type') {
                       displayText = `Property Type: ${match.propertyValue}`
                     } else if (match.label === 'Bathrooms') {
-                      displayText = `Property Number of Bathrooms: ${match.propertyValue}`
+                      displayText = `Number of Bathrooms: ${match.propertyValue}`
+                    } else if (match.label === 'Bedrooms') {
+                      displayText = `Number of Bedrooms: ${match.propertyValue}`
                     } else {
                       displayText = `Property: ${match.propertyValue}`
                     }
@@ -1948,11 +1981,13 @@ export default function ResultsPage() {
                   {weakMatches.map((match, index) => {
                     let displayText = ''
                     if (match.label === 'Size') {
-                      displayText = `Property size: ${match.propertyValue}`
+                      displayText = `Size: ${match.propertyValue} m²`
                     } else if (match.label === 'Property Type') {
                       displayText = `Property Type: ${match.propertyValue}`
                     } else if (match.label === 'Bathrooms') {
-                      displayText = `Property Number of Bathrooms: ${match.propertyValue}`
+                      displayText = `Number of Bathrooms: ${match.propertyValue}`
+                    } else if (match.label === 'Bedrooms') {
+                      displayText = `Number of Bedrooms: ${match.propertyValue}`
                     } else {
                       displayText = `Property: ${match.propertyValue}`
                     }
@@ -1976,87 +2011,108 @@ export default function ResultsPage() {
               </div>
             )}
 
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: '1rem', gap: '2rem' }}>
-              <div style={{ flex: '1', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <ChartRadarPreferences
-                  propertyData={{
-                    bathrooms: propertyData.bathrooms,
-                    bedrooms: propertyData.bedrooms,
-                    propertyType: propertyData.propertyType,
-                    area: propertyData.area,
-                    garden: propertyData.garden,
-                    parking: propertyData.parking,
-                    garage: propertyData.garage,
-                    location: propertyData.distance ? parseFloat(propertyData.distance) : null,
-                  }}
-                  preferenceScores={preferenceScores}
-                />
-              </div>
-              <div style={{ flex: '1', display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '-17%' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', padding: '1rem', gap: '2rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', width: '100%' }}>
                   {preferenceCards.map((card, index) => (
                     <div
                       key={index}
                       style={{
                         backgroundColor: card.backgroundColor,
                         borderRadius: '0.5rem',
-                        padding: '1rem',
+                        padding: '0.95rem',
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '0.5rem'
                       }}
                     >
-                      <div style={{ fontWeight: '600', fontSize: '0.875rem', color: '#000000' }}>
+                      <div style={{ fontWeight: '600', fontSize: '1.05rem', color: '#0A369D' }}>
                         {card.label}
               </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
-                        <div style={{ flex: '1', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                      {card.key === 'location' && (
+                        <div className="text-3xl font-bold" style={{ 
+                          color: '#0A369D',
+                          textAlign: 'left',
+                          marginTop: '1rem',
+                          marginBottom: '1rem'
+                        }}>
+                          {card.actual && card.actual !== 'N/A' ? (card.actual.toString().replace(' km', '') + ' km') : 'N/A'}
+                        </div>
+                      )}
+                      {(card.key === 'garden' || card.key === 'parking' || card.key === 'garage') && (
+                        <div className="text-3xl font-bold" style={{ 
+                          color: '#0A369D',
+                          textAlign: 'left',
+                          marginTop: '1rem',
+                          marginBottom: '1rem'
+                        }}>
+                          {card.isYes ? 'Yes' : 'No'}
+                        </div>
+                      )}
+                      {card.key !== 'location' && card.key !== 'garden' && card.key !== 'parking' && card.key !== 'garage' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                          <div style={{ flex: '1', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                height: '100%',
+                                width: `${card.matchPercentage}%`,
+                                backgroundColor: card.progressColor,
+                                transition: 'width 0.3s ease'
+                              }}
+                />
+              </div>
                           <div
                             style={{
-                              height: '100%',
-                              width: `${card.matchPercentage}%`,
-                              backgroundColor: card.progressColor,
-                              transition: 'width 0.3s ease'
+                              backgroundColor: card.matchBubbleColor,
+                              color: '#FFFFFF',
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '0.5rem',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              minWidth: '3rem',
+                              textAlign: 'center'
                             }}
-                          />
+                          >
+                            {card.matchPercentage}%
+                          </div>
                         </div>
-                        <div
-                          style={{
-                            backgroundColor: card.matchBubbleColor,
-                            color: '#FFFFFF',
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '0.5rem',
-                            fontSize: '0.75rem',
-                            fontWeight: '600',
-                            minWidth: '3rem',
-                            textAlign: 'center'
-                          }}
-                        >
-                          {card.matchPercentage}%
-                        </div>
-                      </div>
+                      )}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem' }}>
-                        <div style={{ fontSize: '0.75rem', color: '#000000' }}>
-                          <strong>Actual:</strong> {formatPropertyValue(card.label, card.actual)}
-                        </div>
-                        {card.preferred && (
+                        {card.key === 'location' && (
+                          <div style={{ fontSize: '0.75rem', color: '#0A369D' }}>
+                            To {(() => {
+                              const postcode = searchParams.get('preferredPostcode');
+                              return postcode && postcode !== 'null' ? postcode : 'Preferences Post Code';
+                            })()}
+                          </div>
+                        )}
+                        {card.key !== 'location' && card.key !== 'garden' && card.key !== 'parking' && card.key !== 'garage' && (
+                          <div style={{ fontSize: '0.75rem', color: '#000000' }}>
+                            <strong>Actual:</strong> {formatPropertyValue(card.label, card.actual)}
+                          </div>
+                        )}
+                        {card.key !== 'location' && card.key !== 'garden' && card.key !== 'parking' && card.key !== 'garage' && card.preferred && (
                           <div style={{ fontSize: '0.75rem', color: '#000000' }}>
                             <strong>Preferred:</strong> {formatUserValue(card.label, card.preferred)}
                           </div>
                         )}
-                        <div style={{ fontSize: '0.75rem', color: '#000000', marginTop: '0.25rem' }}>
-                          <strong>Importance:</strong> {card.importance}/100
-                        </div>
+                        {card.key !== 'location' && card.key !== 'garden' && card.key !== 'parking' && card.key !== 'garage' && (
+                          <div style={{ fontSize: '0.75rem', color: '#000000', marginTop: '0.25rem' }}>
+                            <strong>Importance:</strong> {card.importance}/100
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
-                </div>
               </div>
             </div>
           </div>
           <div className="rounded-lg px-6 py-4 mb-8" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '653.184px', marginLeft: '3%', width: 'calc(5 * 17.97% + 4 * 1rem)', marginTop: '2rem', display: 'flex', flexDirection: 'column', paddingBottom: '2rem' }}>
             <NearbyAmenities amenities={transformNearbyPlaces()} />
           </div>
+          
+          {/* Debug Tables - Only show when ?debug=true */}
+          {isDebugMode && (
+            <>
           <table className="w-full bg-white rounded-lg shadow-md overflow-hidden border border-gray-300" style={{ backgroundColor: '#FFFFFF', marginTop: '2rem' }}>
             <tbody>
               <tr className="border-b border-gray-300">
@@ -2477,6 +2533,8 @@ export default function ResultsPage() {
               </tr>
             </tbody>
           </table>
+            </>
+          )}
         </div>
       </div>
       

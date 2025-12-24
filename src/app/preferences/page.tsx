@@ -113,6 +113,8 @@ export default function PreferencesPage() {
       if (bathrooms) params.append('userBathrooms', bathrooms)
       if (propertyType) params.append('userPropertyType', propertyType)
       if (size) params.append('userSize', size)
+      // Add preferred postcode
+      if (location && location.trim()) params.append('preferredPostcode', location.trim())
       router.push(`/results?${params.toString()}`)
     } catch (error: any) {
       alert(`Error: ${error.message}`)
@@ -356,6 +358,39 @@ export default function PreferencesPage() {
 
           <div className="mt-[30px] grid grid-cols-4" style={{ gap: '1.092rem', maxWidth: '94.248%', marginLeft: 'auto', marginRight: 'auto' }}>
             <div>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <input
+                      type="text"
+                      placeholder="Location"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      className="w-full h-10 bg-white text-black border border-black rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                      style={{ color: '#000000', borderRadius: '0.5rem', textIndent: '0.5rem', fontWeight: '700', paddingRight: '0.75rem', boxSizing: 'border-box', borderWidth: '1px' }}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Enter your ideal post code</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <label className="mt-4 block text-black" style={{ color: '#000000', fontSize: '0.86821875rem', paddingLeft: '0', paddingRight: '0' }}>
+                Preference strength: {locationSlider}
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={locationSlider}
+                onChange={(event) => setLocationSlider(Number(event.target.value))}
+                className="w-full accent-black"
+                style={{ accentColor: '#0A369D', paddingLeft: '0', paddingRight: '0', marginLeft: '0', marginRight: '0' }}
+              />
+            </div>
+
+            <div>
               <div className="flex items-center px-3 py-2 font-bold text-black h-10" style={{ color: '#000000', fontWeight: '700' }}>
                 Garden?
               </div>
@@ -388,39 +423,6 @@ export default function PreferencesPage() {
                 step={1}
                 value={parkingSlider}
                 onChange={(event) => setParkingSlider(Number(event.target.value))}
-                className="w-full accent-black"
-                style={{ accentColor: '#0A369D', paddingLeft: '0', paddingRight: '0', marginLeft: '0', marginRight: '0' }}
-              />
-            </div>
-
-            <div>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <input
-                      type="text"
-                      placeholder="Location"
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
-                      className="w-full h-10 bg-white text-black border border-black rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                      style={{ color: '#000000', borderRadius: '0.5rem', textIndent: '0.5rem', fontWeight: '700', paddingRight: '0.75rem', boxSizing: 'border-box', borderWidth: '1px' }}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Enter your ideal post code</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <label className="mt-4 block text-black" style={{ color: '#000000', fontSize: '0.86821875rem', paddingLeft: '0', paddingRight: '0' }}>
-                Preference strength: {locationSlider}
-              </label>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={locationSlider}
-                onChange={(event) => setLocationSlider(Number(event.target.value))}
                 className="w-full accent-black"
                 style={{ accentColor: '#0A369D', paddingLeft: '0', paddingRight: '0', marginLeft: '0', marginRight: '0' }}
               />
