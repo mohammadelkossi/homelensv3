@@ -9,9 +9,9 @@ import { ChartLineLabel } from "@/components/ui/chart-line-label"
 import { ChartBarPreferences } from "@/components/ui/chart-bar-preferences"
 import { NearbyAmenities } from "@/components/nearby-amenities"
 import { ScoreGauge } from "@/components/ui/score-gauge"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 
-export default function ResultsPage() {
+function ResultsPageContent() {
   const searchParams = useSearchParams()
   const [isScrolled, setIsScrolled] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -2540,5 +2540,13 @@ export default function ResultsPage() {
       
       <Footer />
     </div>
+  )
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ResultsPageContent />
+    </Suspense>
   )
 }
