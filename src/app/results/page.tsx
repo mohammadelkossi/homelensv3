@@ -1787,62 +1787,48 @@ function ResultsPageContent() {
     <div className="min-h-screen bg-white" style={{ backgroundColor: '#FFFFFF', position: 'relative' }}>
       <Navbar isScrolled={isScrolled} />
       
-      {/* Score Gauge - positioned absolutely within the page, scrolls with content */}
-      {mounted && totalScore !== null && (
-        <div 
-          style={{ 
-            position: 'absolute', 
-            zIndex: 40, 
-            right: '21rem', 
-            top: '5.67rem',
-            pointerEvents: 'auto'
-          }}
-        >
-          <ScoreGauge 
-            score={totalScore} 
-            maxScore={999} 
-            animated={true} 
-          />
-        </div>
-      )}
-
-      <div className="container mx-auto px-6 py-12">
-        <div className="mx-auto" style={{ maxWidth: '1357px' }}>
-          <h1 className="text-3xl font-bold" style={{ color: '#0A369D', marginLeft: '3%', marginTop: '5%', marginBottom: '0.84rem', maxWidth: '50%', wordWrap: 'break-word', overflowWrap: 'break-word', lineHeight: '1.2' }}>
+      <div className="w-full max-w-full box-border container mx-auto px-4 sm:px-6 py-6 sm:py-12 overflow-x-hidden">
+        <div className="mx-auto w-full max-w-[1357px] min-w-0">
+          {mounted && totalScore !== null && (
+            <div className="flex justify-center mb-6 lg:mb-0 lg:absolute lg:right-[12rem] xl:right-[21rem] lg:top-[5.5rem] lg:z-40 lg:pointer-events-auto">
+              <ScoreGauge score={totalScore} maxScore={999} animated={true} />
+            </div>
+          )}
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold w-full max-w-full lg:max-w-[50%] lg:ml-[3%] mt-0 sm:mt-[2%] lg:mt-[5%] mb-3 sm:mb-4 break-words leading-tight pr-0" style={{ color: '#0A369D' }}>
             {propertyData.propertyAddress}
           </h1>
-          <h2 className="text-lg mb-8" style={{ color: '#4472CA', marginLeft: '3%', fontSize: 'calc(1em * 0.88)' }}>
-            {propertyData.houseFullPostcode || 'N/A'} | {propertyData.price} | {formatArea(propertyData.area)} | {propertyData.bedrooms} {String(propertyData.bedrooms) === '1' ? 'bedroom' : 'bedrooms'} | {propertyData.bathrooms} {String(propertyData.bathrooms) === '1' ? 'bathroom' : 'bathrooms'} | {propertyData.propertyType}
+          <h2 className="text-sm sm:text-base lg:text-lg mb-4 sm:mb-6 lg:mb-8 lg:ml-[3%] break-words leading-snug" style={{ color: '#4472CA' }}>
+            {propertyData.houseFullPostcode || 'N/A'} · {propertyData.price} · {formatArea(propertyData.area)} · {propertyData.bedrooms} {String(propertyData.bedrooms) === '1' ? 'bed' : 'beds'} · {propertyData.bathrooms} {String(propertyData.bathrooms) === '1' ? 'bath' : 'baths'} · {propertyData.propertyType}
           </h2>
-          <div className="flex mb-8 w-full" style={{ marginTop: 'calc(1rem + 5%)', gap: '1rem', marginLeft: '3%' }}>
-            <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8 lg:ml-[3%] mt-4 sm:mt-6 lg:mt-[calc(1rem+5%)]">
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Price/square metre</div>
-              <div className="text-3xl font-black" style={{ color: getPricePerSqmColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculatePricePerSqm()}</div>
-              <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>{propertyData.propertyAddress}</div>
+              <div className="text-2xl sm:text-3xl font-black" style={{ color: getPricePerSqmColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculatePricePerSqm()}</div>
+              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
             </div>
-            <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Average Price/square metre</div>
-              <div className="text-3xl font-black" style={{ color: '#0A369D', fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{formatPricePerSqmValue(averagePricePerSqm)}</div>
-              <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>For {propertyData.propertyType} in {propertyData.houseOutcode || 'N/A'} over past year</div>
+              <div className="text-2xl sm:text-3xl font-black" style={{ color: '#0A369D', fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{formatPricePerSqmValue(averagePricePerSqm)}</div>
+              <div className="text-xs sm:text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>For {propertyData.propertyType} in {propertyData.houseOutcode || 'N/A'} over past year</div>
             </div>
-            <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Average % growth/year</div>
-              <div className="text-3xl font-black" style={{ color: getCAGRColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculateCAGR()}</div>
-              <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>{propertyData.propertyAddress}</div>
+              <div className="text-2xl sm:text-3xl font-black" style={{ color: getCAGRColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculateCAGR()}</div>
+              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
             </div>
-            <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Days on market</div>
-              <div className="text-3xl font-black" style={{ color: getDaysOnMarketColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{calculateDaysOnMarket()}</div>
-              <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>{propertyData.propertyAddress}</div>
+              <div className="text-2xl sm:text-3xl font-black" style={{ color: getDaysOnMarketColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculateDaysOnMarket()}</div>
+              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
             </div>
-            <div className="rounded-lg px-6 py-4 flex flex-col justify-center" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '129.6px', flex: '0 0 17.97%', maxWidth: '17.97%', gap: '0.3rem' }}>
-              <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem', minHeight: '1.25rem' }}>&nbsp;</div>
-              <div className="text-3xl font-black" style={{ color: getSalesCountColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem', fontSize: 'calc(1.875rem * 1.17)' }}>{propertyData.salesCountPast12Months !== null ? propertyData.salesCountPast12Months : 'N/A'}</div>
-              <div className="text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>Number of sales in {propertyData.houseFullPostcode || 'N/A'} over past year</div>
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
+              <div className="text-sm min-h-[1.25rem]" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>&nbsp;</div>
+              <div className="text-2xl sm:text-3xl font-black" style={{ color: getSalesCountColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{propertyData.salesCountPast12Months !== null ? propertyData.salesCountPast12Months : 'N/A'}</div>
+              <div className="text-xs sm:text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>Number of sales in {propertyData.houseFullPostcode || 'N/A'} over past year</div>
             </div>
           </div>
-          <div className="rounded-lg px-6 py-4 mb-8 flex flex-col" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '424.732896px', marginLeft: '3%', width: 'calc(5 * 17.97% + 4 * 1rem)', marginTop: '2rem', display: 'flex' }}>
-            <h2 className="text-2xl font-bold" style={{ color: '#0A369D', marginLeft: '3.5%', marginTop: '2rem', paddingTop: '1rem', fontSize: 'calc(1.5rem * 1.04)' }}>Average sold price for {propertyData.propertyType} properties in {propertyData.houseOutcode || 'N/A'} over the past 5 years</h2>
+          <div className="rounded-lg px-4 sm:px-6 py-4 mb-6 sm:mb-8 flex flex-col w-full max-w-full min-w-0 lg:w-[calc(5*17.97%+4*1rem)] lg:ml-[3%] mt-6 sm:mt-8 min-h-[280px] sm:min-h-[320px] lg:min-h-[424px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', display: 'flex' }}>
+            <h2 className="text-lg sm:text-2xl font-bold ml-0 sm:ml-[3.5%] mt-4 sm:mt-6 pt-2 sm:pt-4" style={{ color: '#0A369D' }}>Average sold price for {propertyData.propertyType} properties in {propertyData.houseOutcode || 'N/A'} over the past 5 years</h2>
             {averagePriceByYear && (() => {
               const chartData = Object.entries(averagePriceByYear)
                 .sort(([a], [b]) => a.localeCompare(b))
@@ -1877,10 +1863,10 @@ function ResultsPageContent() {
               )
             })()}
             {!averagePriceByYear && (
-              <h2 className="text-2xl font-bold" style={{ color: '#0A369D', marginLeft: '3.5%', marginTop: 'auto', marginBottom: 'auto', fontSize: 'calc(1.5rem * 1.04)' }}>Property Price History</h2>
+              <h2 className="text-lg sm:text-2xl font-bold sm:ml-[3.5%] my-auto" style={{ color: '#0A369D' }}>Property Price History</h2>
             )}
           </div>
-          {priceHistory && priceHistory.length > 0 && averagePriceByYear && (() => {
+          {priceHistory && priceHistory.length > 0 && (() => {
             // Process price history data and add current price as 2025
             const currentPrice = parsePrice(propertyData.price)
             const priceHistoryChartData = priceHistory
@@ -1918,8 +1904,8 @@ function ResultsPageContent() {
             const growthPeriodText = yearsSpan > 0 ? `over ${yearsSpan} years` : 'over time'
 
             return (
-              <div className="rounded-lg px-6 py-4 mb-8 flex flex-col" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '424.732896px', marginLeft: '3%', width: 'calc(5 * 17.97% + 4 * 1rem)', marginTop: '2rem', display: 'flex' }}>
-                <h2 className="text-2xl font-bold" style={{ color: '#0A369D', marginLeft: '3.5%', marginTop: '2rem', paddingTop: '1rem', fontSize: 'calc(1.5rem * 1.04)' }}>Property Price History</h2>
+              <div className="rounded-lg px-4 sm:px-6 py-4 mb-6 sm:mb-8 flex flex-col w-full max-w-full min-w-0 lg:w-[calc(5*17.97%+4*1rem)] lg:ml-[3%] mt-6 sm:mt-8 min-h-[280px] sm:min-h-[320px] lg:min-h-[424px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', display: 'flex' }}>
+                <h2 className="text-lg sm:text-2xl font-bold ml-0 sm:ml-[3.5%] mt-4 sm:mt-6 pt-2 sm:pt-4" style={{ color: '#0A369D' }}>Property Price History</h2>
                 <ChartLineLabel
                   chartData={priceHistoryChartData}
                   propertyType={propertyData.propertyType}
@@ -1932,12 +1918,12 @@ function ResultsPageContent() {
               </div>
             )
           })()}
-          <div className="rounded-lg px-6 py-4 mb-8" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '411.50592px', marginLeft: '3%', width: 'calc(5 * 17.97% + 4 * 1rem)', marginTop: '2rem', display: 'flex', flexDirection: 'column', paddingBottom: '2rem' }}>
-            <h2 className="text-2xl font-bold" style={{ color: '#0A369D', marginLeft: '3.5%', marginTop: '2rem', paddingTop: '1rem', fontSize: 'calc(1.5rem * 1.04)' }}>Preferences</h2>
+          <div className="rounded-lg px-4 sm:px-6 py-4 mb-6 sm:mb-8 w-full max-w-full min-w-0 lg:w-[calc(5*17.97%+4*1rem)] lg:ml-[3%] mt-6 sm:mt-8 pb-6 sm:pb-8" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '411.50592px', display: 'flex', flexDirection: 'column' }}>
+            <h2 className="text-lg sm:text-2xl font-bold ml-0 sm:ml-[3.5%] mt-4 sm:mt-6 pt-2 sm:pt-4" style={{ color: '#0A369D' }}>Preferences</h2>
             
             {/* Strong Matches Section */}
             {strongMatches.length > 0 && (
-              <div style={{ marginLeft: '3.5%', marginTop: '1.5rem', marginBottom: '1rem' }}>
+              <div className="ml-0 sm:ml-[3.5%] mt-6 mb-4">
                 <h3 className="text-lg font-semibold" style={{ color: '#000000', marginBottom: '0.5rem' }}>Strong Matches</h3>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                   {strongMatches.map((match, index) => {
@@ -1975,7 +1961,7 @@ function ResultsPageContent() {
 
             {/* Weak Matches Section */}
             {weakMatches.length > 0 && (
-              <div style={{ marginLeft: '3.5%', marginTop: '1rem', marginBottom: '1rem' }}>
+              <div className="ml-0 sm:ml-[3.5%] mt-4 mb-4">
                 <h3 className="text-lg font-semibold" style={{ color: '#000000', marginBottom: '0.5rem' }}>Weak Matches</h3>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                   {weakMatches.map((match, index) => {
@@ -2011,8 +1997,8 @@ function ResultsPageContent() {
               </div>
             )}
 
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', padding: '1rem', gap: '2rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', width: '100%' }}>
+            <div className="w-full flex flex-col sm:flex-row justify-center items-stretch sm:items-start p-4 gap-4 sm:gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                   {preferenceCards.map((card, index) => (
                     <div
                       key={index}
@@ -2025,26 +2011,14 @@ function ResultsPageContent() {
                         gap: '0.5rem'
                       }}
                     >
-                      <div style={{ fontWeight: '600', fontSize: '1.05rem', color: '#0A369D' }}>
-                        {card.label}
-              </div>
+                      <div className="font-semibold text-sm sm:text-base text-[#0A369D]">{card.label}</div>
                       {card.key === 'location' && (
-                        <div className="text-3xl font-bold" style={{ 
-                          color: '#0A369D',
-                          textAlign: 'left',
-                          marginTop: '1rem',
-                          marginBottom: '1rem'
-                        }}>
+                        <div className="text-xl sm:text-2xl lg:text-3xl font-bold mt-2 mb-2 text-left text-[#0A369D]">
                           {card.actual && card.actual !== 'N/A' ? (card.actual.toString().replace(' km', '') + ' km') : 'N/A'}
                         </div>
                       )}
                       {(card.key === 'garden' || card.key === 'parking' || card.key === 'garage') && (
-                        <div className="text-3xl font-bold" style={{ 
-                          color: '#0A369D',
-                          textAlign: 'left',
-                          marginTop: '1rem',
-                          marginBottom: '1rem'
-                        }}>
+                        <div className="text-xl sm:text-2xl lg:text-3xl font-bold mt-2 mb-2 text-left text-[#0A369D]">
                           {card.isYes ? 'Yes' : 'No'}
                         </div>
                       )}
@@ -2106,14 +2080,14 @@ function ResultsPageContent() {
               </div>
             </div>
           </div>
-          <div className="rounded-lg px-6 py-4 mb-8" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '653.184px', marginLeft: '3%', width: 'calc(5 * 17.97% + 4 * 1rem)', marginTop: '2rem', display: 'flex', flexDirection: 'column', paddingBottom: '2rem' }}>
+          <div className="rounded-lg px-4 sm:px-6 py-4 mb-6 sm:mb-8 w-full max-w-full min-w-0 lg:w-[calc(5*17.97%+4*1rem)] lg:ml-[3%] mt-6 sm:mt-8 pb-6 sm:pb-8" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '653.184px', display: 'flex', flexDirection: 'column' }}>
             <NearbyAmenities amenities={transformNearbyPlaces()} />
           </div>
           
           {/* Debug Tables - Only show when ?debug=true */}
           {isDebugMode && (
-            <>
-          <table className="w-full bg-white rounded-lg shadow-md overflow-hidden border border-gray-300" style={{ backgroundColor: '#FFFFFF', marginTop: '2rem' }}>
+            <div className="w-full max-w-full overflow-x-auto mt-6">
+          <table className="w-full min-w-[500px] bg-white rounded-lg shadow-md border border-gray-300" style={{ backgroundColor: '#FFFFFF' }}>
             <tbody>
               <tr className="border-b border-gray-300">
                 <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Property Address</td>
@@ -2533,7 +2507,7 @@ function ResultsPageContent() {
               </tr>
             </tbody>
           </table>
-            </>
+            </div>
           )}
         </div>
       </div>

@@ -124,7 +124,7 @@ export default function PreferencesPage() {
   return (
     <div className="min-h-screen bg-white" style={{ backgroundColor: '#FFFFFF' }}>
       <Navbar isScrolled={isScrolled} />
-      <div className="container mx-auto px-6 min-h-[70vh] flex flex-col items-center justify-center gap-6">
+      <div className="container mx-auto px-4 sm:px-6 min-h-[70vh] flex flex-col items-center justify-center gap-6">
         <div
           className="flex flex-col items-center gap-6 w-full"
           style={{
@@ -132,11 +132,11 @@ export default function PreferencesPage() {
             transition: 'transform 400ms ease'
           }}
         >
-        <h1 className="text-center" style={{ color: '#000000', fontWeight: 'normal', fontSize: '1.56rem', marginBottom: '1.65rem', maxWidth: '39.2%', width: '39.2%', marginLeft: 'auto', marginRight: 'auto', display: 'block' }}>
+        <h1 className="text-center w-full px-4 md:max-w-[39.2%] md:w-[39.2%] md:px-0 text-base sm:text-lg md:text-xl" style={{ color: '#000000', fontWeight: 'normal', marginBottom: '1.65rem', marginLeft: 'auto', marginRight: 'auto', display: 'block' }}>
           Enter the Rightmove link you're interested in
         </h1>
 
-          <div className="w-1/2 max-w-4xl mx-auto">
+          <div className="w-full max-w-4xl mx-auto px-4 md:px-0 md:w-1/2">
             <InputWithButton
               type="text"
               placeholder="https://www.rightmove.co.uk/properties/..."
@@ -185,12 +185,12 @@ export default function PreferencesPage() {
       </div>
 
       {showPreferences && (
-        <section className="container mx-auto px-6 py-12" style={{ marginTop: '-160px' }}>
-          <div className="border border-gray-300 rounded-lg p-8 mx-auto bg-gray-200" style={{ borderRadius: '0.505rem', border: '1px solid #d1d5db', padding: '2rem', maxWidth: '85%', width: '85%', backgroundColor: '#CFDEE7' }}>
-            <h2 className="text-2xl font-semibold mb-6 text-left" style={{ color: '#000000', marginLeft: '2.8%' }}>
+        <section className="container mx-auto px-4 sm:px-6 py-8 md:py-12" style={{ marginTop: '-160px' }}>
+          <div className="border border-gray-300 rounded-lg p-4 sm:p-6 md:p-8 mx-auto w-full max-w-full md:max-w-[85%] md:w-[85%]" style={{ borderRadius: '0.505rem', border: '1px solid #d1d5db', backgroundColor: '#CFDEE7' }}>
+            <h2 className="text-xl md:text-2xl font-semibold mb-6 text-left px-1" style={{ color: '#000000' }}>
               Set your preferences
             </h2>
-          <div className="grid grid-cols-4" style={{ gap: '1.092rem', maxWidth: '94.248%', marginLeft: 'auto', marginRight: 'auto' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-[1.092rem] max-w-full lg:max-w-[94.248%] mx-auto">
             <div>
               <Select value={bedrooms} onValueChange={setBedrooms}>
                 <SelectTrigger className="w-full bg-white text-black border-black rounded-lg font-bold" style={{ borderRadius: '0.5rem', fontWeight: '700', backgroundColor: '#ffffff', color: '#000000' }}>
@@ -356,7 +356,7 @@ export default function PreferencesPage() {
             </div>
           </div>
 
-          <div className="mt-[30px] grid grid-cols-4" style={{ gap: '1.092rem', maxWidth: '94.248%', marginLeft: 'auto', marginRight: 'auto' }}>
+          <div className="mt-6 md:mt-[30px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-[1.092rem] max-w-full lg:max-w-[94.248%] mx-auto">
             <div>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
@@ -448,12 +448,12 @@ export default function PreferencesPage() {
             </div>
           </div>
 
-          <div className="mt-8 flex justify-center" style={{ marginTop: '5vh' }}>
+          <div className="mt-8 flex justify-center px-2" style={{ marginTop: '5vh' }}>
             <Button 
               onClick={handleGenerateReport}
               disabled={isLoading}
-              className="text-white border disabled:opacity-50 rounded-lg" 
-              style={{ fontWeight: '600', transform: 'scale(1.521)', borderRadius: '0.5rem', color: '#ffffff', backgroundColor: '#0A369D', borderColor: '#0A369D' }}
+              className="text-white border disabled:opacity-50 rounded-lg w-full sm:w-auto sm:scale-[1.521]" 
+              style={{ fontWeight: '600', borderRadius: '0.5rem', color: '#ffffff', backgroundColor: '#0A369D', borderColor: '#0A369D' }}
             >
               {isLoading ? 'Generating Report...' : 'Generate Report'}
             </Button>

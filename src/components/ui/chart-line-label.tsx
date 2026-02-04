@@ -45,8 +45,8 @@ export function ChartLineLabel({ chartData, propertyType, outcode, growth, showH
   } satisfies ChartConfig
 
   return (
-    <div className="flex-1 flex flex-col" style={{ marginTop: '1rem', padding: '0.5rem 1rem' }}>
-      <ChartContainer config={chartConfig} className="flex-1" style={{ height: '196px', minHeight: '196px', maxHeight: '196px' }}>
+    <div className="flex-1 flex flex-col w-full min-w-0" style={{ marginTop: '1rem', padding: '0.5rem 1rem' }}>
+      <ChartContainer config={chartConfig} chartHeight={196} className="flex-1 w-full max-w-full" style={{ height: '196px', minHeight: '196px', maxHeight: '196px', width: '100%' }}>
         <LineChart
           accessibilityLayer
           data={chartData}
