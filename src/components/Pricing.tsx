@@ -11,11 +11,11 @@ export const Pricing = () => {
   );
 
   return (
-    <section className="flex flex-col items-center gap-10 py-10" style={{ backgroundColor: 'transparent' }}>
+    <section className="flex flex-col items-center gap-10 py-10 font-sans" style={{ backgroundColor: 'transparent' }}>
       {/* Section Header */}
       <PricingHeader
         title="Plans and Pricing"
-        subtitle="Receive unlimited credits when you pay yearly, and save on your plan."
+        subtitle="Simple monthly pricing. No long-term commitment."
         frequencies={PAYMENT_FREQUENCIES}
         selectedFrequency={selectedPaymentFreq}
         onFrequencyChange={setSelectedPaymentFreq}

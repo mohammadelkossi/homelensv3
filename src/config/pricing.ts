@@ -1,5 +1,6 @@
-export const PAYMENT_FREQUENCIES = ["monthly", "yearly"];
+export const PAYMENT_FREQUENCIES = ["monthly"];
 
+// All numeric prices are in GBP (£)
 export interface PricingTier {
   name: string;
   id: string;
@@ -21,34 +22,34 @@ export const TIERS: PricingTier[] = [
     },
     description: "Perfect for getting started with property search",
     features: [
-      "Property search and filtering",
-      "Basic property recommendations",
-      "Save up to 5 properties",
-      "Email support",
-      "Mobile app access",
+      "5 full property analyses",
+      "Smart HomeLens score (financial + lifestyle fit)",
+      "Key price insights (area averages & trends)",
+      "Clear strengths & red flags for each property",
+      "No card required",
+      "❌ No saved properties",
+      "❌ No share & download reports",
     ],
-    cta: "Get Started Free",
+    cta: "Get started for free",
   },
   {
     id: "professional",
-    name: "Professional",
+    name: "Pro",
     price: {
-      monthly: 29,
-      yearly: 24,
+      monthly: 5,
+      yearly: 5,
     },
     description: "Ideal for serious home buyers and investors",
     features: [
-      "Unlimited property searches",
-      "Advanced AI recommendations",
-      "Save unlimited properties",
-      "Market analysis reports",
-      "Priority support",
-      "Price alerts",
-      "Virtual tours",
-      "Mortgage calculator",
+      "50 property analyses/month",
+      "Smart HomeLens score (financial + lifestyle fit)",
+      "Key price insights (area averages & trends)",
+      "Clear strengths & red flags for each property",
+      "Save interested properties",
+      "Download & share reports",
+      "Cancel anytime",
     ],
-    cta: "Start Free Trial",
-    popular: true,
+    cta: "Sign Up",
   },
 ];
 

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ComparisonTable } from "@/components/comparison-table"
 import Link from "next/link"
 import { useState } from "react"
-import { Calculator, ChevronDown, ChevronUp, Star, TrendingUp } from "lucide-react"
+import { Award, BarChart3, Calculator, Calendar, ChevronDown, ChevronUp, Heart, LineChart, Map, MapPin, PoundSterling, Star, TrendingUp } from "lucide-react"
 
 export default function Home() {
   const [openFAQ, setOpenFAQ] = useState<number | null>(null)
@@ -99,90 +99,72 @@ export default function Home() {
         <div className="container mx-auto px-6 py-20">
           <h2 className="text-3xl md:text-4xl font-bold text-center" style={{ color: '#160F29' }}>What&apos;s included</h2>
 
-          <div className="mt-16 relative">
-            {/* Continuous vertical line for desktop */}
-            <div className="hidden md:block absolute left-1/2 transform -translate-x-1/2" style={{ width: '3px', backgroundColor: '#0A369D', top: '0', bottom: '0', zIndex: 0 }}></div>
-            
-            <div className="space-y-[9rem] relative">
-              {[
-                {
-                  number: '01',
-                  title: 'Market Metrics',
-                  description: (
-                    <>
-                      We show you the real numbers. Is this home priced right? Are<br />
-                      prices going up or down in this area? We compare it to similar<br />
-                      homes sold recently.
-                    </>
-                  ),
-                  position: 'left'
-                },
-                {
-                  number: '02',
-                  title: 'Custom Criteria',
-                  description: (
-                    <>
-                      We score how well this home fits your needs. Does it have<br />
-                      what you want most? We check every detail that matters to you.
-                    </>
-                  ),
-                  position: 'right'
-                },
-                {
-                  number: '03',
-                  title: 'Personalised Recommendations',
-                  description:
-                    'We give you a clear answer. Book a viewing, make an offer, or keep looking? No more guessing what to do next.',
-                  position: 'left'
-                },
-              ].map((item, index, arr) => (
-                <div key={item.number} className="relative">
-                  {/* Mobile layout */}
-                  <div className="md:hidden flex flex-col items-center text-center gap-1">
-                    <div className="rounded-full flex items-center justify-center text-white font-semibold" style={{ backgroundColor: '#0A369D', width: '51.408px', height: '51.408px', fontSize: '0.918rem' }}>
-                      {item.number}
-                  </div>
-                    <div>
-                      <h3 className="text-2xl font-semibold" style={{ color: '#160F29' }}>{item.title}</h3>
-                      <p className="mt-3 text-base leading-relaxed" style={{ color: '#246A73' }}>{item.description}</p>
+          <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 md:gap-10">
+            {[
+              {
+                icon: MapPin,
+                heading: 'Full Address',
+                subheading: 'View complete property address including house number & full post code',
+              },
+              {
+                icon: PoundSterling,
+                heading: 'Property Price Value',
+                subheading: 'Compare property price per square metre against the area & property type average',
+              },
+              {
+                icon: Calendar,
+                heading: 'Date Posted',
+                subheading: 'Reveal real property list date rather than when property was reduced',
+              },
+              {
+                icon: TrendingUp,
+                heading: 'Area Price Trends',
+                subheading: 'Track area sold price trends over the past 5 years',
+              },
+              {
+                icon: BarChart3,
+                heading: 'Area Supply & Demand',
+                subheading: 'See how many properties within the post code have been sold over the past year to gauge supply & demand',
+              },
+              {
+                icon: LineChart,
+                heading: 'Property Historic Growth',
+                subheading: 'Review past sale prices to understand the property\'s long-term value potential',
+              },
+              {
+                icon: Heart,
+                heading: 'Personalised Preferences',
+                subheading: 'Score properties based on your non-negotiables including criteria such as number of bathrooms, garden, parking & garage etc',
+              },
+              {
+                icon: Map,
+                heading: 'Amenities',
+                subheading: 'Explore nearby schools, transport, shops, gyms, and green spaces that affect daily living.',
+              },
+              {
+                icon: Award,
+                heading: 'Overall Score',
+                subheading: 'A single Homelens score that incorporates all the above',
+              },
+            ].map((item, index) => (
+              <div
+                key={index}
+                className="flex flex-col items-center text-center p-6 rounded-xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div
+                  className="flex items-center justify-center w-14 h-14 rounded-full mb-4"
+                  style={{ backgroundColor: '#0A369D' }}
+                >
+                  <item.icon className="w-7 h-7 text-white" strokeWidth={1.5} />
+                </div>
+                <h3 className="text-lg font-semibold" style={{ color: '#160F29' }}>
+                  {item.heading}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed" style={{ color: '#246A73' }}>
+                  {item.subheading}
+                </p>
               </div>
-              </div>
-
-                  {/* Desktop layout */}
-                  {item.position === 'left' ? (
-                    <div className="hidden md:flex md:relative" style={{ minHeight: '100px' }}>
-                      <div className="flex-1 relative">
-                        <div className="absolute right-0" style={{ top: '50%', transform: 'translateY(-50%)', right: 'calc(50% - 260px)', textAlign: 'right', maxWidth: '100%' }}>
-                          <h3 className="text-2xl font-semibold" style={{ color: '#000000' }}>{item.title}</h3>
-                          <p className="mt-3 text-base leading-relaxed" style={{ color: '#0A369D' }}>{item.description}</p>
-                        </div>
-                      </div>
-                      <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center" style={{ top: '50%', transform: 'translate(-50%, -50%)', zIndex: 10 }}>
-                        <div className="rounded-full flex items-center justify-center text-white font-semibold" style={{ backgroundColor: '#0A369D', width: '58.752px', height: '58.752px', fontSize: '1.1475rem', border: '2.16px solid white' }}>
-                          {item.number}
-                        </div>
-                      </div>
-                      <div style={{ flex: 1 }}></div>
-                    </div>
-                  ) : (
-                    <div className="hidden md:flex md:relative" style={{ minHeight: '100px' }}>
-                      <div style={{ flex: 1 }}></div>
-                      <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center" style={{ top: '50%', transform: 'translate(-50%, -50%)', zIndex: 10 }}>
-                        <div className="rounded-full flex items-center justify-center text-white font-semibold" style={{ backgroundColor: '#0A369D', width: '58.752px', height: '58.752px', fontSize: '1.1475rem', border: '2.16px solid white' }}>
-                          {item.number}
-                        </div>
-                      </div>
-                      <div className="flex-1 relative">
-                        <div className="absolute left-0" style={{ top: '50%', transform: 'translateY(-50%)', left: 'calc(50% - 260px)', textAlign: 'left', maxWidth: '100%' }}>
-                          <h3 className="text-2xl font-semibold" style={{ color: '#000000' }}>{item.title}</h3>
-                          <p className="mt-3 text-base leading-relaxed" style={{ color: '#0A369D' }}>{item.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-              </div>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
       </section>
@@ -225,7 +207,7 @@ export default function Home() {
               },
               {
                 question: 'How much does HomeLens cost?',
-                answer: "It's completely free"
+                answer: "5 properties are analysed free of charge every month, beyond this the cost is £5/month - this is to cover the heavy processing costs associated with producing reports"
               },
               {
                 question: 'What if the information is not publicly available?',

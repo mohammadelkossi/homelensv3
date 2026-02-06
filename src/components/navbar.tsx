@@ -35,11 +35,6 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
                     <Link href="/pricing" className="!text-black hover:!text-gray-600 transition-colors px-4 py-2 no-underline" style={{ color: '#000000', fontWeight: '600' }}>Pricing</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
-                <NavigationMenuItem>
-                  <NavigationMenuLink asChild>
-                    <Link href="/blog" className="!text-black hover:!text-gray-600 transition-colors px-4 py-2 no-underline" style={{ color: '#000000', fontWeight: '600' }}>Blog</Link>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
               </NavigationMenuList>
             </NavigationMenu>
           </div>
@@ -66,7 +61,6 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 py-4 flex flex-col gap-3 bg-white">
             <Link href="/pricing" className="px-4 py-3 text-black font-semibold hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
-            <Link href="/blog" className="px-4 py-3 text-black font-semibold hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Blog</Link>
             <div className="flex flex-col gap-2 px-4 pt-2">
               <Button asChild size="lg" className="w-full bg-[#0A369D] text-white hover:bg-[#082e83] rounded-full h-11" style={{ fontWeight: '600' }}>
                 <Link href="/preferences" className="no-underline text-white" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>

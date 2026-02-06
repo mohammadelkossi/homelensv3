@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import NumberFlow from "@number-flow/react";
-import { ArrowRight, BadgeCheck } from "lucide-react";
+import { ArrowRight, BadgeCheck, X } from "lucide-react";
 
 export const PricingCard = ({
   tier,
@@ -19,7 +19,7 @@ export const PricingCard = ({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-8 overflow-hidden rounded-2xl border p-6 shadow",
+        "relative flex flex-col gap-8 overflow-hidden rounded-2xl border p-6 shadow font-sans",
         isHighlighted
           ? "bg-gray-100 text-black border-gray-300"
           : "bg-white text-black border-gray-200",
@@ -40,24 +40,26 @@ export const PricingCard = ({
         )}
       </h2>
 
-      {/* Price Section */}
-      <div className="relative h-12">
-        {typeof price === "number" ? (
-          <>
+      {/* Price Section - aligned across cards */}
+      <div className="relative min-h-[4.5rem] flex flex-col justify-end">
+        <div className="flex items-baseline gap-1">
+          {typeof price === "number" ? (
             <NumberFlow
               format={{
                 style: "currency",
-                currency: "USD",
+                currency: "GBP",
                 trailingZeroDisplay: "stripIfInteger",
               }}
               value={price}
               className="text-4xl font-medium"
               style={{ color: '#000000' }}
             />
-            <p className="-mt-2 text-xs font-medium" style={{ color: '#000000' }}>Per month/user</p>
-          </>
-        ) : (
-          <h1 className="text-4xl font-medium" style={{ color: '#000000' }}>{price}</h1>
+          ) : (
+            <span className="text-4xl font-medium block -translate-y-[60%]" style={{ color: '#000000' }}>{price}</span>
+          )}
+        </div>
+        {typeof price === "number" && (
+          <p className="text-xs font-medium mt-0.5" style={{ color: '#000000' }}>Per month</p>
         )}
       </div>
 
@@ -65,19 +67,36 @@ export const PricingCard = ({
       <div className="flex-1 space-y-2">
         <h3 className={cn("text-sm font-medium", isHighlighted ? "text-gray-600" : "text-gray-600")} style={{ color: '#000000' }}>{tier.description}</h3>
         <ul className="space-y-2">
-          {tier.features.map((feature, index) => (
-            <li
-              key={index}
-              className={cn(
-                "flex items-center gap-2 text-sm font-medium",
-                isHighlighted ? "text-gray-700" : "text-gray-600",
-              )}
-              style={{ color: '#000000' }}
-            >
-              <BadgeCheck strokeWidth={1} size={16} />
-              {feature}
-            </li>
-          ))}
+          {tier.features.map((feature, index) => {
+            const isExcluded = feature.startsWith("❌ ");
+            const isBestFor = feature.startsWith("Best for:");
+            const text = isExcluded ? feature.slice(2) : feature;
+            return (
+              <li
+                key={index}
+                className={cn(
+                  "flex items-center gap-2 text-sm font-medium",
+                  isHighlighted ? "text-gray-700" : "text-gray-600",
+                  isExcluded && "opacity-80",
+                  isBestFor && "text-xs mt-3 pt-2 border-t border-gray-200",
+                )}
+                style={{ color: isExcluded ? "#6b7280" : "#000000" }}
+              >
+                {isBestFor ? (
+                  <span className="flex-1">{feature}</span>
+                ) : (
+                  <>
+                    {isExcluded ? (
+                      <X strokeWidth={2} size={16} className="shrink-0 text-gray-400" />
+                    ) : (
+                      <BadgeCheck strokeWidth={1} size={16} className="shrink-0" />
+                    )}
+                    {text}
+                  </>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
 

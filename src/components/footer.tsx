@@ -22,9 +22,6 @@ export function Footer() {
             <Link href="/pricing" className="text-black hover:text-black visited:text-black transition-colors no-underline" style={{ color: '#000000' }}>
               Pricing
             </Link>
-            <Link href="/blog" className="text-black hover:text-black visited:text-black transition-colors no-underline" style={{ color: '#000000' }}>
-              Blog
-            </Link>
             <Link href="/privacy" className="text-black hover:text-black visited:text-black transition-colors no-underline" style={{ color: '#000000', whiteSpace: 'nowrap' }}>
               Privacy Policy
             </Link>
