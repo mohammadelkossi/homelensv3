@@ -93,8 +93,8 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
     return '#0A369D'
   }
 
-  const size = 400
-  const strokeWidth = 34
+  const size = 323
+  const strokeWidth = 27
   const radius = (size - strokeWidth) / 2
   const innerRadius = radius - strokeWidth / 2
   const outerRadius = radius + strokeWidth / 2
@@ -142,19 +142,14 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
     <div className="relative" style={{ width: size, height: size / 2 + 40 }}>
       <svg width={size} height={size / 2 + 40} viewBox={`0 0 ${size} ${size / 2 + 40}`} className="overflow-visible">
         {segments.map((segment, index) => {
-          // Always use dark green #38943E for the rightmost segment (index 4), regardless of score
           const isRightmost = index === 4
           const fillColor = isRightmost ? "#38943E" : segment.color
           return (
             <path
               key={index}
               d={createWedge(segment.startAngle, segment.endAngle)}
-              fill={isRightmost ? "#38943E" : fillColor}
-              className="transition-opacity duration-300"
-              style={{
-                opacity: percentage * 5 > index ? 1 : 0.3,
-                fill: isRightmost ? "#38943E" : fillColor, // Force dark green #38943E for rightmost segment always
-              }}
+              fill={fillColor}
+              style={{ fill: fillColor }}
             />
           )
         })}
@@ -162,7 +157,7 @@ export function ScoreGauge({ score, maxScore = 999, animated = true }: ScoreGaug
 
       {/* Score display */}
       <div className="absolute inset-0 flex flex-col items-center justify-end pb-2" style={{ transform: 'translateY(-15%)' }}>
-        <span className="font-bold tabular-nums" style={{ color: getNumberColor(), fontSize: '4.75453125rem' }}>
+        <span className="font-bold tabular-nums" style={{ color: getNumberColor(), fontSize: '3.84rem' }}>
           {displayScore}
         </span>
       </div>

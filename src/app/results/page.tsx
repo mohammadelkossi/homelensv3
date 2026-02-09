@@ -10,11 +10,42 @@ import { ChartBarPreferences } from "@/components/ui/chart-bar-preferences"
 import { NearbyAmenities } from "@/components/nearby-amenities"
 import { ScoreGauge } from "@/components/ui/score-gauge"
 import { useState, useEffect, Suspense } from "react"
-
 function ResultsPageContent() {
   const searchParams = useSearchParams()
   const [isScrolled, setIsScrolled] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [shareFeedback, setShareFeedback] = useState<"idle" | "copied">("idle")
+
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : ""
+    const title = "HomeLens Property Analysis"
+
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title,
+          url,
+          text: `Check out this HomeLens property analysis: ${propertyData.propertyAddress}`,
+        })
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          await copyToClipboard(url)
+        }
+      }
+    } else {
+      await copyToClipboard(url)
+    }
+  }
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setShareFeedback("copied")
+      setTimeout(() => setShareFeedback("idle"), 2000)
+    } catch {
+      setShareFeedback("idle")
+    }
+  }
 
   useEffect(() => {
     setMounted(true)
@@ -1790,7 +1821,7 @@ function ResultsPageContent() {
       <div className="w-full max-w-full box-border container mx-auto px-4 sm:px-6 py-6 sm:py-12 overflow-x-hidden">
         <div className="mx-auto w-full max-w-[1357px] min-w-0">
           {mounted && totalScore !== null && (
-            <div className="flex justify-center mb-6 lg:mb-0 lg:absolute lg:right-[12rem] xl:right-[21rem] lg:top-[5.5rem] lg:z-40 lg:pointer-events-auto">
+            <div className="flex justify-center mb-6 lg:mb-0 lg:absolute lg:right-[5.88rem] xl:right-[10.29rem] lg:top-[calc(5.5rem+5vh)] lg:z-40 lg:pointer-events-auto" style={{ transform: 'scale(0.88)', transformOrigin: 'center center' }}>
               <ScoreGauge score={totalScore} maxScore={999} animated={true} />
             </div>
           )}
@@ -1800,28 +1831,28 @@ function ResultsPageContent() {
           <h2 className="text-sm sm:text-base lg:text-lg mb-4 sm:mb-6 lg:mb-8 lg:ml-[3%] break-words leading-snug" style={{ color: '#4472CA' }}>
             {propertyData.houseFullPostcode || 'N/A'} · {propertyData.price} · {formatArea(propertyData.area)} · {propertyData.bedrooms} {String(propertyData.bedrooms) === '1' ? 'bed' : 'beds'} · {propertyData.bathrooms} {String(propertyData.bathrooms) === '1' ? 'bath' : 'baths'} · {propertyData.propertyType}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8 lg:ml-[3%] mt-4 sm:mt-6 lg:mt-[calc(1rem+5%)]">
-            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8 w-full max-w-full min-w-0 lg:w-[calc(5*17.97%+4*1rem)] lg:ml-[3%] mt-4 sm:mt-6 lg:mt-[calc(1rem+5%)]">
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Price/square metre</div>
               <div className="text-2xl sm:text-3xl font-black" style={{ color: getPricePerSqmColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculatePricePerSqm()}</div>
               <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
             </div>
-            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Average Price/square metre</div>
               <div className="text-2xl sm:text-3xl font-black" style={{ color: '#0A369D', fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{formatPricePerSqmValue(averagePricePerSqm)}</div>
               <div className="text-xs sm:text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>For {propertyData.propertyType} in {propertyData.houseOutcode || 'N/A'} over past year</div>
             </div>
-            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Average % growth/year</div>
               <div className="text-2xl sm:text-3xl font-black" style={{ color: getCAGRColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculateCAGR()}</div>
               <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
             </div>
-            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Days on market</div>
               <div className="text-2xl sm:text-3xl font-black" style={{ color: getDaysOnMarketColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculateDaysOnMarket()}</div>
               <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
             </div>
-            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px]" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
+            <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm min-h-[1.25rem]" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>&nbsp;</div>
               <div className="text-2xl sm:text-3xl font-black" style={{ color: getSalesCountColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{propertyData.salesCountPast12Months !== null ? propertyData.salesCountPast12Months : 'N/A'}</div>
               <div className="text-xs sm:text-sm" style={{ color: '#0A369D', marginTop: '0.3rem' }}>Number of sales in {propertyData.houseFullPostcode || 'N/A'} over past year</div>
@@ -2509,6 +2540,24 @@ function ResultsPageContent() {
           </table>
             </div>
           )}
+
+          {/* Share & Analyse another property buttons - beneath amenities, above footer */}
+          <div className="flex justify-end gap-3 px-4 sm:px-6 py-6">
+            <button
+              onClick={handleShare}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-opacity hover:opacity-90"
+              style={{ backgroundColor: '#0A369D', color: '#FFFFFF' }}
+            >
+              {shareFeedback === "copied" ? "Link copied!" : "Share"}
+            </button>
+            <Link
+              href="/preferences"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-opacity hover:opacity-90"
+              style={{ backgroundColor: '#0A369D', color: '#FFFFFF' }}
+            >
+              Analyse another property
+            </Link>
+          </div>
         </div>
       </div>
       
