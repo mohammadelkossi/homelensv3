@@ -32,15 +32,21 @@ export const Pricing = () => {
 
   const handleCtaClick = async (tier: (typeof TIERS)[0]) => {
     if (tier.id === "professional") {
-      if (!user) {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!url || !key) return;
+      const supabase = createBrowserClient(url, key);
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
         openSignup();
         return;
       }
-      const paymentLink =
+      const base =
         process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ??
         "https://buy.stripe.com/test_bJe28qav8eAcaVI7CO43S00";
+      const stripeUrl = `${base}?client_reference_id=${encodeURIComponent(currentUser.id)}&prefilled_email=${encodeURIComponent(currentUser.email ?? "")}`;
       setCheckoutLoading(true);
-      window.location.href = paymentLink;
+      window.location.href = stripeUrl;
       return;
     }
     if (tier.id === "basic") {
