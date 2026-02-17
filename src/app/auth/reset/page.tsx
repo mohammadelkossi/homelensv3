@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { createBrowserClient } from "@supabase/ssr"
+import type { AuthError } from "@supabase/supabase-js"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,7 +42,7 @@ export default function AuthResetPage() {
     // Path 2: callback sent us with ?code=... — exchange on client (requires same browser that requested reset)
     const code = params.get("code")
     if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }: { error: AuthError | null }) => {
         if (error) {
           const sameBrowserHint = " Open this link in the same browser where you requested the reset, or request a new link (links expire in a few minutes)."
           setMessage({
