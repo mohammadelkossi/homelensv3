@@ -9,8 +9,25 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { ArrowRight, Info } from "lucide-react"
 import { useState, useEffect, type ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
+import { useLoginPopup } from "@/components/login-popup"
+import { createBrowserClient } from "@supabase/ssr"
+import type { User } from "@supabase/supabase-js"
 
 export default function PreferencesPage() {
+  const { openLogin } = useLoginPopup()
+  const [user, setUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!url || !key) return
+    const supabase = createBrowserClient(url, key)
+    supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u ?? null))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
   const initialText = "https://www.rightmove.co.uk/properties/..."
   const [value, setValue] = useState<string>(initialText)
   const [showPreferences, setShowPreferences] = useState<boolean>(false)
@@ -47,6 +64,10 @@ export default function PreferencesPage() {
   const router = useRouter()
 
   const handleGenerateReport = async () => {
+    if (!user) {
+      openLogin()
+      return
+    }
     if (!value || value === initialText || value.trim() === '') {
       alert('Please enter a valid Rightmove URL')
       return

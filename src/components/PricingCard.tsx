@@ -8,9 +8,13 @@ import { ArrowRight, BadgeCheck, X } from "lucide-react";
 export const PricingCard = ({
   tier,
   paymentFrequency,
+  onCtaClick,
+  ctaDisabled,
 }: {
   tier: (typeof TIERS)[0];
   paymentFrequency: string;
+  onCtaClick?: (tier: (typeof TIERS)[0]) => void;
+  ctaDisabled?: boolean;
 }) => {
   const price = tier.price[paymentFrequency];
   const isHighlighted = tier.highlighted;
@@ -109,8 +113,10 @@ export const PricingCard = ({
           "h-fit w-full rounded-lg bg-black text-white hover:bg-gray-800",
           isHighlighted && "bg-black text-white hover:bg-gray-800",
         )}
+        onClick={() => onCtaClick?.(tier)}
+        disabled={ctaDisabled}
       >
-        {tier.cta}
+        {ctaDisabled ? "Loading…" : tier.cta}
       </Button>
     </div>
   );
