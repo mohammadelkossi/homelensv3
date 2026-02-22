@@ -95,11 +95,11 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
                       Account
                     </Link>
                     <Link
-                      href="/saved-properties"
+                      href="/contact"
                       className="block px-4 py-2 text-sm text-black hover:bg-gray-100 no-underline"
                       onClick={() => setAccountDropdownOpen(false)}
                     >
-                      Saved Properties
+                      Contact Us
                     </Link>
                     <div className="my-1 border-t border-gray-200" aria-hidden="true" />
                     <button
@@ -141,7 +141,7 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
                 <Link href="/account" className="px-4 py-3 text-black font-medium hover:bg-gray-100 rounded-lg truncate" onClick={() => setMobileMenuOpen(false)}>
                   {user.user_metadata?.full_name ?? user.email ?? "Account"}
                 </Link>
-                <Link href="/saved-properties" className="px-4 py-3 text-black font-medium hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Saved Properties</Link>
+                <Link href="/contact" className="px-4 py-3 text-black font-medium hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Contact Us</Link>
               </>
             )}
             <div className="flex flex-col gap-2 px-4 pt-2">

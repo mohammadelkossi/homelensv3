@@ -207,7 +207,7 @@ export default function Home() {
               },
               {
                 question: 'How much does HomeLens cost?',
-                answer: "5 properties are analysed free of charge every month, beyond this the cost is £5/month - this is to cover the heavy processing costs associated with producing reports"
+                answer: "3 properties are analysed free of charge, beyond this the cost is £5/month - this is to cover the heavy processing costs associated with producing reports"
               },
               {
                 question: 'What if the information is not publicly available?',

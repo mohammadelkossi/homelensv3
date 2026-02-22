@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -35,6 +36,7 @@ type LoginPopupContextType = {
   setOpen: (open: boolean) => void
   openLogin: () => void
   openSignup: () => void
+  openUpgradeLimit: () => void
 }
 
 const LoginPopupContext = createContext<LoginPopupContextType | null>(null)
@@ -48,6 +50,7 @@ export function useLoginPopup() {
 export function LoginPopupProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   const [openWithMode, setOpenWithMode] = useState<"login" | "signup" | null>(null)
+  const [upgradeLimitOpen, setUpgradeLimitOpen] = useState(false)
   const openLogin = useCallback(() => {
     setOpenWithMode(null)
     setOpen(true)
@@ -56,12 +59,48 @@ export function LoginPopupProvider({ children }: { children: React.ReactNode }) 
     setOpenWithMode("signup")
     setOpen(true)
   }, [])
+  const openUpgradeLimit = useCallback(() => {
+    setUpgradeLimitOpen(true)
+  }, [])
 
   return (
-    <LoginPopupContext.Provider value={{ open, setOpen, openLogin, openSignup }}>
+    <LoginPopupContext.Provider value={{ open, setOpen, openLogin, openSignup, openUpgradeLimit }}>
       {children}
       <LoginPopup openWithMode={openWithMode} setOpenWithMode={setOpenWithMode} />
+      <UpgradeLimitPopup open={upgradeLimitOpen} onClose={() => setUpgradeLimitOpen(false)} />
     </LoginPopupContext.Provider>
+  )
+}
+
+function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const router = useRouter()
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" aria-hidden onClick={onClose} />
+      <Card className="relative z-10 w-full max-w-md p-6 shadow-lg">
+        <CardHeader className="p-0 pb-4">
+          <CardTitle className="text-xl">You&apos;ve run out of free analyses</CardTitle>
+          <CardDescription className="pt-1">
+            You&apos;ve used your 3 free property analyses. Upgrade to Pro to continue generating reports.
+          </CardDescription>
+        </CardHeader>
+        <CardFooter className="flex gap-3 p-0 pt-4">
+          <Button variant="outline" onClick={onClose} className="flex-1">
+            Close
+          </Button>
+          <Button
+            className="flex-1 bg-[#0A369D] hover:bg-[#082e83]"
+            onClick={() => {
+              onClose()
+              router.push("/pricing")
+            }}
+          >
+            Upgrade to Pro
+          </Button>
+        </CardFooter>
+      </Card>
+    </div>
   )
 }
 

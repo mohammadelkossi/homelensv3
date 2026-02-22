@@ -22,7 +22,7 @@ export const TIERS: PricingTier[] = [
     },
     description: "Perfect for getting started with property search",
     features: [
-      "5 full property analyses",
+      "3 full property analyses",
       "Smart HomeLens score (financial + lifestyle fit)",
       "Key price insights (area averages & trends)",
       "Clear strengths & red flags for each property",

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { ApifyClient } from 'apify-client';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
 
 // Helper function to check features array for keywords
 function checkFeature(features: string[] | undefined, keywords: string[]): string {
@@ -631,14 +633,84 @@ async function getPostcodeCoordinates(postcode: string): Promise<{ latitude: num
   }
 }
 
+const FREE_PROPERTY_LIMIT = 3;
+
 export async function POST(request: NextRequest) {
   try {
     // Check if environment variables are set
-    if (!process.env.APIFY_API_TOKEN || !process.env.OPENAI_API_KEY) {
-      console.error('Missing environment variables');
+    const missingApiKeys = [
+      !process.env.APIFY_API_TOKEN && 'APIFY_API_TOKEN',
+      !process.env.OPENAI_API_KEY && 'OPENAI_API_KEY',
+    ].filter(Boolean) as string[];
+    if (missingApiKeys.length > 0) {
+      console.error('Server configuration: missing env vars:', missingApiKeys.join(', '));
       return NextResponse.json(
         { error: 'Server configuration error: Missing API keys' },
         { status: 500 }
+      );
+    }
+
+    const body = await request.json();
+    const { url, postcode } = body;
+
+    if (!url) {
+      return NextResponse.json(
+        { error: 'URL is required' },
+        { status: 400 }
+      );
+    }
+
+    // Auth: require signed-in user
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll() {},
+        },
+      }
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Free-tier limit: check profile (plan, property_reports_used).
+    // Ensure profiles has: property_reports_used (integer, default 0).
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const missingSupabase = [
+      !supabaseUrl && 'NEXT_PUBLIC_SUPABASE_URL',
+      !serviceRoleKey && 'SUPABASE_SERVICE_ROLE_KEY',
+    ].filter(Boolean) as string[];
+    if (missingSupabase.length > 0) {
+      console.error('Server configuration: missing env vars:', missingSupabase.join(', '));
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('plan, property_reports_used')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const plan = profile?.plan ?? 'free';
+    const used = profile?.property_reports_used ?? 0;
+
+    if (plan !== 'pro' && used >= FREE_PROPERTY_LIMIT) {
+      return NextResponse.json(
+        {
+          error: 'limit_reached',
+          message: "You've used your 3 free property analyses. Upgrade to Pro to continue.",
+        },
+        { status: 403 }
       );
     }
 
@@ -651,16 +723,7 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const { url, postcode } = await request.json();
-    
     console.log('Starting Apify actor run for URL:', url);
-
-    if (!url) {
-      return NextResponse.json(
-        { error: 'URL is required' },
-        { status: 400 }
-      );
-    }
 
     // Start Apify actor run
     const run = await apifyClient.actor('dhrumil~rightmove-scraper').start({
@@ -823,6 +886,23 @@ export async function POST(request: NextRequest) {
       averagePricePerSqmSimple: pricePerSqmStats ? pricePerSqmStats.simpleAverage : null,
       averagePricePerSqmMatchedSaleCount: pricePerSqmStats ? pricePerSqmStats.matchedSaleCount : 0,
     };
+
+    // Increment free-tier usage after successful report
+    if (plan !== 'pro') {
+      const newCount = used + 1;
+      if (profile) {
+        await supabaseAdmin
+          .from('profiles')
+          .update({ property_reports_used: newCount })
+          .eq('id', user.id);
+      } else {
+        await supabaseAdmin.from('profiles').insert({
+          id: user.id,
+          plan: 'free',
+          property_reports_used: 1,
+        });
+      }
+    }
 
     return NextResponse.json(result);
   } catch (error: any) {

@@ -14,7 +14,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import type { User } from "@supabase/supabase-js"
 
 export default function PreferencesPage() {
-  const { openLogin } = useLoginPopup()
+  const { openLogin, openUpgradeLimit } = useLoginPopup()
   const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
@@ -97,8 +97,13 @@ export default function PreferencesPage() {
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to scrape property')
+        const data = await response.json()
+        if (response.status === 403 && data.error === 'limit_reached') {
+          openUpgradeLimit()
+          setIsLoading(false)
+          return
+        }
+        throw new Error(data.error || 'Failed to scrape property')
       }
 
       const data = await response.json()
