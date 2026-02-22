@@ -690,7 +690,7 @@ export async function POST(request: NextRequest) {
     if (missingSupabase.length > 0) {
       console.error('Server configuration: missing env vars:', missingSupabase.join(', '));
       return NextResponse.json(
-        { error: 'Server configuration error' },
+        { error: `Server configuration error: missing ${missingSupabase.join(', ')}. Add these in Vercel → Project → Settings → Environment Variables.` },
         { status: 500 }
       );
     }
