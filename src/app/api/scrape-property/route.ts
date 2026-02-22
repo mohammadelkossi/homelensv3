@@ -694,7 +694,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = createClient(supabaseUrl as string, serviceRoleKey as string);
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('plan, property_reports_used')
