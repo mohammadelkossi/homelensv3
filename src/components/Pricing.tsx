@@ -43,7 +43,7 @@ export const Pricing = () => {
       }
       const base =
         process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ??
-        "https://buy.stripe.com/test_bJe28qav8eAcaVI7CO43S00";
+        "https://buy.stripe.com/00w4gz0jwagQ1QA3O5ds400";
       const stripeUrl = `${base}?client_reference_id=${encodeURIComponent(currentUser.id)}&prefilled_email=${encodeURIComponent(currentUser.email ?? "")}`;
       setCheckoutLoading(true);
       window.location.href = stripeUrl;
