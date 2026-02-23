@@ -41,12 +41,17 @@ export const Pricing = () => {
         openSignup();
         return;
       }
-      const base =
-        process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ??
-        "https://buy.stripe.com/00w4gz0jwagQ1QA3O5ds400";
-      const stripeUrl = `${base}?client_reference_id=${encodeURIComponent(currentUser.id)}&prefilled_email=${encodeURIComponent(currentUser.email ?? "")}`;
       setCheckoutLoading(true);
-      window.location.href = stripeUrl;
+      try {
+        const res = await fetch("/api/stripe/create-checkout-session", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to start checkout");
+        if (data.url) window.location.href = data.url;
+        else setCheckoutLoading(false);
+      } catch (e) {
+        setCheckoutLoading(false);
+        alert(e instanceof Error ? e.message : "Something went wrong");
+      }
       return;
     }
     if (tier.id === "basic") {
