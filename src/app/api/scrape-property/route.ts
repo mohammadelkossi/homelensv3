@@ -697,14 +697,18 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = createClient(supabaseUrl as string, serviceRoleKey as string);
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('plan, property_reports_used')
+      .select('plan, property_reports_used, stripe_subscription_id, stripe_status')
       .eq('id', user.id)
       .maybeSingle();
 
-    const plan = profile?.plan ?? 'free';
+    const planValue = profile?.plan ?? 'free';
+    const hasActiveSubscription =
+      !!profile?.stripe_subscription_id &&
+      (profile?.stripe_status === 'active' || profile?.stripe_status === 'trialing');
+    const isPro = planValue === 'pro' || hasActiveSubscription;
     const used = profile?.property_reports_used ?? 0;
 
-    if (plan !== 'pro' && used >= FREE_PROPERTY_LIMIT) {
+    if (!isPro && used >= FREE_PROPERTY_LIMIT) {
       return NextResponse.json(
         {
           error: 'limit_reached',
@@ -888,7 +892,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Increment free-tier usage after successful report
-    if (plan !== 'pro') {
+    if (!isPro) {
       const newCount = used + 1;
       if (profile) {
         await supabaseAdmin

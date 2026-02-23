@@ -34,10 +34,11 @@ export default async function AccountPage({
     )
     const { data: profile } = await admin
       .from("profiles")
-      .select("plan")
+      .select("plan, stripe_subscription_id, stripe_status")
       .eq("id", user.id)
       .maybeSingle()
     if (profile?.plan === "pro") plan = "pro"
+    else if (profile?.stripe_subscription_id && (profile?.stripe_status === "active" || profile?.stripe_status === "trialing")) plan = "pro"
   }
 
   return (

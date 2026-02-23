@@ -89,18 +89,19 @@ export async function POST(request: NextRequest) {
         console.log("[Stripe Webhook] User ID being updated (checkout.session.completed):", clientReferenceId)
         console.log("[Stripe Webhook] Subscription status from Stripe:", status)
 
-        const { error: updateError } = await supabase
+        const profileRow = {
+          id: clientReferenceId,
+          plan: planForStatus(status),
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscriptionId,
+          stripe_status: status,
+        }
+        const { error: upsertError } = await supabase
           .from("profiles")
-          .update({
-            plan: planForStatus(status),
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-            stripe_status: status,
-          })
-          .eq("id", clientReferenceId)
+          .upsert(profileRow, { onConflict: "id" })
 
-        if (updateError) {
-          console.error("[Stripe Webhook] Supabase update error (profiles):", updateError)
+        if (upsertError) {
+          console.error("[Stripe Webhook] Supabase upsert error (profiles):", upsertError)
           return NextResponse.json({ error: "Update failed" }, { status: 500 })
         }
         break
