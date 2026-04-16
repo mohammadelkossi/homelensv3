@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
+import { getPostHogClient } from "@/lib/posthog-server"
 
 /**
  * Stripe webhook handler. Uses raw body for signature verification —
@@ -104,6 +105,17 @@ export async function POST(request: NextRequest) {
           console.error("[Stripe Webhook] Supabase upsert error (profiles):", upsertError)
           return NextResponse.json({ error: "Update failed" }, { status: 500 })
         }
+
+        const posthog = getPostHogClient()
+        posthog.capture({
+          distinctId: clientReferenceId,
+          event: "subscription_activated",
+          properties: {
+            plan: planForStatus(status),
+            stripe_subscription_id: subscriptionId,
+            stripe_status: status,
+          },
+        })
         break
       }
 
@@ -194,6 +206,15 @@ export async function POST(request: NextRequest) {
           console.error("[Stripe Webhook] Supabase update error (profiles):", updateError)
           return NextResponse.json({ error: "Update failed" }, { status: 500 })
         }
+
+        const posthogCancel = getPostHogClient()
+        posthogCancel.capture({
+          distinctId: profile.id,
+          event: "subscription_canceled",
+          properties: {
+            stripe_subscription_id: subscriptionId,
+          },
+        })
         break
       }
 

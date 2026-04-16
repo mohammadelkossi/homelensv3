@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
+import posthog from "posthog-js"
 
 const REDIRECT_DELAY_MS = 5000
 
@@ -12,6 +13,7 @@ export default function CheckoutSuccessPage() {
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_DELAY_MS / 1000)
 
   useEffect(() => {
+    posthog.capture('checkout_completed', { plan: 'professional' })
     const redirectTimer = setTimeout(() => {
       router.replace("/preferences")
     }, REDIRECT_DELAY_MS)

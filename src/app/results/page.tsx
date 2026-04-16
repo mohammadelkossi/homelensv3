@@ -25,7 +25,7 @@ function ResultsPageContent() {
         await navigator.share({
           title,
           url,
-          text: `Check out this HomeLens property analysis: ${propertyData.propertyAddress}`,
+          text: `Check out this HomeLens property analysis: ${displayAddress}`,
         })
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
@@ -62,6 +62,7 @@ function ResultsPageContent() {
   
   // Extract data from URL params
   const propertyData = {
+    fullAddress: searchParams.get('fullAddress') || null,
     propertyAddress: searchParams.get('propertyAddress') || 'N/A',
     price: searchParams.get('price') || 'N/A',
     propertyType: searchParams.get('propertyType') || 'N/A',
@@ -81,6 +82,7 @@ function ResultsPageContent() {
     houseOutcode: searchParams.get('houseOutcode') === 'null' || !searchParams.get('houseOutcode') ? null : searchParams.get('houseOutcode'),
     salesCountPast12Months: searchParams.get('salesCountPast12Months') === 'null' || !searchParams.get('salesCountPast12Months') ? null : searchParams.get('salesCountPast12Months'),
   }
+  const displayAddress = propertyData.fullAddress || propertyData.propertyAddress
 
   const averagePriceByYearParam = searchParams.get('averagePriceByYear')
   let averagePriceByYear: Record<string, number> | null = null
@@ -1826,8 +1828,13 @@ function ResultsPageContent() {
             </div>
           )}
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold w-full max-w-full lg:max-w-[50%] lg:ml-[3%] mt-0 sm:mt-[2%] lg:mt-[5%] mb-3 sm:mb-4 break-words leading-tight pr-0" style={{ color: '#0A369D' }}>
-            {propertyData.propertyAddress}
+            {displayAddress}
           </h1>
+          {propertyData.fullAddress && propertyData.fullAddress !== propertyData.propertyAddress && (
+            <p className="text-xs sm:text-sm mb-2 lg:ml-[3%] break-words leading-snug" style={{ color: '#4472CA' }}>
+              Original listing address: {propertyData.propertyAddress}
+            </p>
+          )}
           <h2 className="text-sm sm:text-base lg:text-lg mb-4 sm:mb-6 lg:mb-8 lg:ml-[3%] break-words leading-snug" style={{ color: '#4472CA' }}>
             {propertyData.houseFullPostcode || 'N/A'} · {propertyData.price} · {formatArea(propertyData.area)} · {propertyData.bedrooms} {String(propertyData.bedrooms) === '1' ? 'bed' : 'beds'} · {propertyData.bathrooms} {String(propertyData.bathrooms) === '1' ? 'bath' : 'baths'} · {propertyData.propertyType}
           </h2>
@@ -1835,7 +1842,7 @@ function ResultsPageContent() {
             <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Price/square metre</div>
               <div className="text-2xl sm:text-3xl font-black" style={{ color: getPricePerSqmColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculatePricePerSqm()}</div>
-              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
+              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={displayAddress}>{displayAddress}</div>
             </div>
             <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Average Price/square metre</div>
@@ -1845,12 +1852,12 @@ function ResultsPageContent() {
             <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Average % growth/year</div>
               <div className="text-2xl sm:text-3xl font-black" style={{ color: getCAGRColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculateCAGR()}</div>
-              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
+              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={displayAddress}>{displayAddress}</div>
             </div>
             <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>Days on market</div>
               <div className="text-2xl sm:text-3xl font-black" style={{ color: getDaysOnMarketColor(), fontWeight: '900', marginTop: '0.3rem', marginBottom: '0.3rem' }}>{calculateDaysOnMarket()}</div>
-              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={propertyData.propertyAddress}>{propertyData.propertyAddress}</div>
+              <div className="text-xs sm:text-sm truncate" style={{ color: '#0A369D', marginTop: '0.3rem' }} title={displayAddress}>{displayAddress}</div>
             </div>
             <div className="rounded-lg px-4 sm:px-6 py-4 flex flex-col justify-center min-h-[100px] sm:min-h-[129.6px] min-w-0" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', gap: '0.3rem' }}>
               <div className="text-sm min-h-[1.25rem]" style={{ color: '#0A369D', marginBottom: '0.3rem' }}>&nbsp;</div>
@@ -1943,7 +1950,7 @@ function ResultsPageContent() {
                   outcode={propertyData.houseOutcode || 'N/A'}
                   growth={priceHistoryGrowth}
                   showHeading={false}
-                  descriptionText={`Showing price history for ${propertyData.propertyAddress}`}
+                  descriptionText={`Showing price history for ${displayAddress}`}
                   growthPeriodText={growthPeriodText}
                 />
               </div>
@@ -2121,8 +2128,18 @@ function ResultsPageContent() {
           <table className="w-full min-w-[500px] bg-white rounded-lg shadow-md border border-gray-300" style={{ backgroundColor: '#FFFFFF' }}>
             <tbody>
               <tr className="border-b border-gray-300">
-                <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Property Address</td>
+                <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Full Address</td>
+                <td className="px-6 py-4" style={{ color: '#000000' }}>{displayAddress}</td>
+              </tr>
+              <tr className="border-b border-gray-300">
+                <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Property Address (scraped)</td>
                 <td className="px-6 py-4" style={{ color: '#000000' }}>{propertyData.propertyAddress}</td>
+              </tr>
+              <tr className="border-b border-gray-300">
+                <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Address Match Source</td>
+                <td className="px-6 py-4" style={{ color: '#000000' }}>
+                  {propertyData.fullAddress && propertyData.fullAddress !== propertyData.propertyAddress ? 'Land Registry SPARQL (Price Paid) match' : 'Fallback to scraped propertyAddress'}
+                </td>
               </tr>
               <tr className="border-b border-gray-300">
                 <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Price</td>

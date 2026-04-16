@@ -8,6 +8,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import posthog from "posthog-js";
 
 export const Pricing = () => {
   const [selectedPaymentFreq, setSelectedPaymentFreq] = useState(
@@ -46,8 +47,10 @@ export const Pricing = () => {
         const res = await fetch("/api/stripe/create-checkout-session", { method: "POST" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to start checkout");
-        if (data.url) window.location.href = data.url;
-        else setCheckoutLoading(false);
+        if (data.url) {
+          posthog.capture('checkout_initiated', { plan: 'professional' });
+          window.location.href = data.url;
+        } else setCheckoutLoading(false);
       } catch (e) {
         setCheckoutLoading(false);
         alert(e instanceof Error ? e.message : "Something went wrong");

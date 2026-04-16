@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import { useLoginPopup } from "@/components/login-popup"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User } from "@supabase/supabase-js"
+import posthog from "posthog-js"
 
 export default function PreferencesPage() {
   const { openLogin, openUpgradeLimit } = useLoginPopup()
@@ -99,6 +100,7 @@ export default function PreferencesPage() {
       if (!response.ok) {
         const data = await response.json()
         if (response.status === 403 && data.error === 'limit_reached') {
+          posthog.capture('upgrade_limit_shown', { property_url: value.trim() })
           openUpgradeLimit()
           setIsLoading(false)
           return
@@ -107,6 +109,7 @@ export default function PreferencesPage() {
       }
 
       const data = await response.json()
+      posthog.capture('report_generated', { property_url: value.trim() })
       
       // Navigate to results page with data in URL state
       const params = new URLSearchParams()
@@ -143,6 +146,8 @@ export default function PreferencesPage() {
       if (location && location.trim()) params.append('preferredPostcode', location.trim())
       router.push(`/results?${params.toString()}`)
     } catch (error: any) {
+      posthog.capture('report_generation_failed', { property_url: value.trim(), error_message: error.message })
+      posthog.captureException(error)
       alert(`Error: ${error.message}`)
       setIsLoading(false)
     }
@@ -194,6 +199,7 @@ export default function PreferencesPage() {
               }}
               onButtonClick={() => {
                 if (!error && value && value !== initialText) {
+                  posthog.capture('property_url_submitted', { property_url: value.trim() })
                   setShowPreferences(true)
                 }
               }}

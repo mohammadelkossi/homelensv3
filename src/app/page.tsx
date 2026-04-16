@@ -8,6 +8,7 @@ import { ComparisonTable } from "@/components/comparison-table"
 import Link from "next/link"
 import { useState } from "react"
 import { Award, BarChart3, Calculator, Calendar, ChevronDown, ChevronUp, Heart, LineChart, Map, MapPin, PoundSterling, Star, TrendingUp } from "lucide-react"
+import posthog from "posthog-js"
 
 export default function Home() {
   const [openFAQ, setOpenFAQ] = useState<number | null>(null)
@@ -44,7 +45,7 @@ export default function Home() {
             </p>
             <div className="mt-8 flex justify-start">
               <Link href="/preferences">
-                <Button style={{ padding: '12px 32px', fontSize: '18px', borderRadius: '8px', backgroundColor: '#0A369D', color: 'white', border: 'none', cursor: 'pointer' }}>
+                <Button onClick={() => posthog.capture('get_started_clicked', { location: 'hero' })} style={{ padding: '12px 32px', fontSize: '18px', borderRadius: '8px', backgroundColor: '#0A369D', color: 'white', border: 'none', cursor: 'pointer' }}>
                   Get Started for Free
                 </Button>
               </Link>
@@ -281,6 +282,7 @@ export default function Home() {
               </p>
               <Link href="/preferences">
                 <Button
+                  onClick={() => posthog.capture('get_started_clicked', { location: 'cta_section' })}
                   className="px-8 py-3 text-lg font-semibold rounded-lg"
                   style={{
                     backgroundColor: '#CFDEE7',

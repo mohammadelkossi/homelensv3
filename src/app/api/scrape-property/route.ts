@@ -343,6 +343,205 @@ function normalizeAddress(value: string | null | undefined): string | null {
     .trim();
 }
 
+type PriceHistoryEntry = {
+  price: string;
+  year: string;
+};
+
+const LAND_REGISTRY_SPARQL_ENDPOINT = 'https://landregistry.data.gov.uk/landregistry/query';
+
+function parseSoldPrice(value: string): number | null {
+  const digits = value.replace(/[^\d]/g, '');
+  if (!digits) return null;
+  const parsed = Number(digits);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseSaleYear(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const direct = Number(trimmed);
+  if (Number.isFinite(direct) && direct >= 1900 && direct <= 2100) {
+    return direct;
+  }
+
+  const yearMatch = trimmed.match(/\b(19|20)\d{2}\b/);
+  if (!yearMatch) return null;
+  const extracted = Number(yearMatch[0]);
+  if (!Number.isFinite(extracted) || extracted < 1900 || extracted > 2100) return null;
+  return extracted;
+}
+
+function normalizePriceHistory(rawHistory: unknown): PriceHistoryEntry[] {
+  if (!Array.isArray(rawHistory)) return [];
+  return rawHistory
+    .map((entry: any) => ({
+      price: entry?.soldPrice || entry?.price || entry?.sold_price || '',
+      year: entry?.year || entry?.date || entry?.soldDate || entry?.sold_date || '',
+    }))
+    .filter((entry: { price: string; year: string }) => parseSoldPrice(entry.price) !== null && parseSaleYear(entry.year) !== null)
+    .map((entry: { price: string; year: string }) => ({
+      price: String(parseSoldPrice(entry.price)),
+      year: String(parseSaleYear(entry.year)),
+    }))
+    .sort((a: { year: string }, b: { year: string }) => parseInt(a.year) - parseInt(b.year));
+}
+
+/** First segment before comma, strip leading house number — for LR street CONTAINS filter. */
+function extractStreetSearchFragment(listingAddress: string): string | null {
+  const s = listingAddress.trim();
+  if (!s || s === 'N/A') return null;
+  const first = s.split(',')[0]?.trim() ?? s;
+  const withoutFlat = first.replace(/^(Flat|Unit|Apartment|Suite)\s+[^,]+,?\s*/i, '').trim();
+  const withoutLeading = withoutFlat.replace(/^\d+[A-Za-z]?\s+/, '').trim();
+  if (withoutLeading.length < 4) return null;
+  return withoutLeading.toLowerCase();
+}
+
+type SparqlLiteral = { type: string; value: string; datatype?: string };
+type SparqlBinding = Record<string, SparqlLiteral>;
+
+function sparqlBindingString(binding: SparqlBinding, key: string): string | null {
+  const v = binding[key]?.value;
+  return v ?? null;
+}
+
+function composeLandRegistryAddress(binding: SparqlBinding): string {
+  const paon = sparqlBindingString(binding, 'paon');
+  const saon = sparqlBindingString(binding, 'saon');
+  const street = sparqlBindingString(binding, 'street');
+  const town = sparqlBindingString(binding, 'town');
+  const postcode = sparqlBindingString(binding, 'postcode');
+  const line1 = [paon, saon].filter(Boolean).join(' ').trim();
+  const parts = [line1 || null, street, town, postcode].filter((p): p is string => !!p?.trim());
+  return parts.join(', ');
+}
+
+function escapeSparqlString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+async function runLandRegistrySparql(query: string): Promise<SparqlBinding[]> {
+  const url = new URL(LAND_REGISTRY_SPARQL_ENDPOINT);
+  url.searchParams.set('query', query);
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 45000);
+  try {
+    const res = await fetch(url.toString(), {
+      headers: { Accept: 'application/sparql-results+json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.error('Land Registry SPARQL HTTP error:', res.status, await res.text().catch(() => ''));
+      return [];
+    }
+    const json = (await res.json()) as { results?: { bindings?: SparqlBinding[] } };
+    return json.results?.bindings ?? [];
+  } catch (e) {
+    console.error('Land Registry SPARQL request failed:', e);
+    return [];
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Resolve full address via HM Land Registry linked-data SPARQL (Price Paid).
+ * Does not use Supabase. Requires at least one price-history row with parseable price + year.
+ */
+async function getFullAddressFromLandRegistrySparql(
+  fullPostcode: string | null,
+  outcode: string | null,
+  priceHistory: PriceHistoryEntry[],
+  listingAddress: string
+): Promise<string | null> {
+  if (!priceHistory.length) return null;
+  if (!fullPostcode && !outcode) return null;
+
+  const normalized = priceHistory
+    .map((entry) => ({
+      price: parseSoldPrice(entry.price),
+      year: parseSaleYear(entry.year),
+    }))
+    .filter((e): e is { price: number; year: number } => e.price !== null && e.year !== null);
+
+  if (!normalized.length) return null;
+
+  const streetFragment = extractStreetSearchFragment(listingAddress);
+  const pcExact = fullPostcode ? fullPostcode.trim().toUpperCase() : null;
+  const outPrefix = !pcExact && outcode ? `${outcode.trim().toUpperCase()} ` : null;
+
+  const buildQuery = () => {
+    let postcodeBlock: string;
+    if (pcExact) {
+      postcodeBlock = `?addr common:postcode "${escapeSparqlString(pcExact)}" .`;
+    } else if (outPrefix) {
+      postcodeBlock = `?addr common:postcode ?lr_postcode .
+  FILTER(STRSTARTS(?lr_postcode, "${escapeSparqlString(outPrefix)}"))`;
+    } else {
+      return null;
+    }
+    return (price: number, year: number, streetFilter: string) => {
+      const yStart = `${year}-01-01`;
+      const yEnd = `${year}-12-31`;
+      return `PREFIX lrppi: <http://landregistry.data.gov.uk/def/ppi/>
+PREFIX common: <http://landregistry.data.gov.uk/def/common/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?paon ?saon ?street ?town ?postcode ?price ?date
+WHERE {
+  ?record a lrppi:TransactionRecord ;
+          lrppi:pricePaid ?price ;
+          lrppi:transactionDate ?date ;
+          lrppi:propertyAddress ?addr .
+  ?addr common:street ?street .
+  ${postcodeBlock}
+  ${streetFilter}
+  FILTER(?price = ${price})
+  FILTER(?date >= "${yStart}"^^xsd:date && ?date <= "${yEnd}"^^xsd:date)
+  OPTIONAL { ?addr common:paon ?paon }
+  OPTIONAL { ?addr common:saon ?saon }
+  OPTIONAL { ?addr common:town ?town }
+  OPTIONAL { ?addr common:postcode ?postcode }
+}
+LIMIT 5`;
+    };
+  };
+
+  const mk = buildQuery();
+  if (!mk) return null;
+
+  for (const { price, year } of normalized) {
+    const streetFilter = streetFragment
+      ? `FILTER(CONTAINS(LCASE(?street), "${escapeSparqlString(streetFragment)}"))`
+      : '';
+
+    const tryQueries = streetFragment
+      ? [
+          mk(price, year, streetFilter),
+          mk(price, year, ''),
+        ]
+      : [mk(price, year, '')];
+
+    for (const query of tryQueries) {
+      const bindings = await runLandRegistrySparql(query);
+      if (bindings.length === 1) {
+        return composeLandRegistryAddress(bindings[0]);
+      }
+      if (bindings.length > 1) {
+        console.warn('Land Registry SPARQL: multiple rows for price/year/postcode; skipping', {
+          price,
+          year,
+          count: bindings.length,
+        });
+        break;
+      }
+    }
+  }
+
+  return null;
+}
+
 async function fetchEpcRowsForPostcode(postcode: string): Promise<any[]> {
   if (
     !postcode ||
@@ -793,17 +992,8 @@ export async function POST(request: NextRequest) {
       openai
     );
 
-    // Process price history - sort by year ascending (earliest first)
-    let priceHistory: Array<{ price: string; year: string }> = [];
-    if (propertyData.priceHistory && Array.isArray(propertyData.priceHistory) && propertyData.priceHistory.length > 0) {
-      priceHistory = propertyData.priceHistory
-        .map((entry: any) => ({
-          price: entry.soldPrice || '',
-          year: entry.year || '',
-        }))
-        .filter((entry: { price: string; year: string }) => entry.price && entry.year)
-        .sort((a: { year: string }, b: { year: string }) => parseInt(a.year) - parseInt(b.year)); // Sort ascending (earliest first)
-    }
+    // Process price history from Apify
+    let priceHistory: Array<{ price: string; year: string }> = normalizePriceHistory(propertyData.priceHistory);
 
     // Get postcode from property coordinates using Google Maps Geocoding API
     const propertyLat = propertyData.coordinates?.latitude;
@@ -824,6 +1014,13 @@ export async function POST(request: NextRequest) {
     const pricePerSqmStats = await getAveragePricePerSqmForPropertyTypeAndOutcode(
       housePostcode.outcode,
       propertyTypeCode
+    );
+
+    const matchedFullAddress = await getFullAddressFromLandRegistrySparql(
+      housePostcode.fullPostcode,
+      housePostcode.outcode,
+      priceHistory,
+      propertyData.displayAddress || ''
     );
 
     // Get nearby places (amenities) for all categories
@@ -862,6 +1059,7 @@ export async function POST(request: NextRequest) {
     // Extract all required fields
     const result = {
       propertyAddress: propertyData.displayAddress || 'N/A',
+      fullAddress: matchedFullAddress || propertyData.displayAddress || 'N/A',
       price: propertyData.price || 'N/A',
       propertyType: propertyData.propertyType || 'N/A',
       bathrooms: propertyData.bathrooms?.toString() || 'N/A',

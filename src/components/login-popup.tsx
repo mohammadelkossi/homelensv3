@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { X } from "lucide-react"
+import posthog from "posthog-js"
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -92,6 +93,7 @@ function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => vo
           <Button
             className="flex-1 bg-[#0A369D] hover:bg-[#082e83]"
             onClick={() => {
+              posthog.capture('upgrade_to_pro_clicked', { source: 'limit_popup' })
               onClose()
               router.push("/pricing")
             }}
@@ -169,6 +171,11 @@ function LoginPopup({
       setLoginError(error.message)
       return
     }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      posthog.identify(user.id, { email: user.email, name: user.user_metadata?.full_name })
+      posthog.capture('user_logged_in', { method: 'email' })
+    }
     closePopup()
   }
 
@@ -231,6 +238,7 @@ function LoginPopup({
       setSignupError(error.message)
       return
     }
+    posthog.capture('user_signed_up', { method: 'email' })
     setSignupSuccess(true)
   }
 
