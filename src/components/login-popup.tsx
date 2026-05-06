@@ -129,6 +129,7 @@ function LoginPopup({
   const [signupEmail, setSignupEmail] = useState("")
   const [signupPassword, setSignupPassword] = useState("")
   const [signupConfirm, setSignupConfirm] = useState("")
+  const [marketingOptIn, setMarketingOptIn] = useState(true)
   const [signupLoading, setSignupLoading] = useState(false)
   const [signupError, setSignupError] = useState<string | null>(null)
   const [signupSuccess, setSignupSuccess] = useState(false)
@@ -231,14 +232,19 @@ function LoginPopup({
     const { error } = await supabase.auth.signUp({
       email: signupEmail.trim(),
       password: signupPassword,
-      options: { data: { full_name: signupName.trim() || undefined } },
+      options: {
+        data: {
+          full_name: signupName.trim() || undefined,
+          marketing_opt_in: marketingOptIn,
+        },
+      },
     })
     setSignupLoading(false)
     if (error) {
       setSignupError(error.message)
       return
     }
-    posthog.capture('user_signed_up', { method: 'email' })
+    posthog.capture('user_signed_up', { method: 'email', marketing_opt_in: marketingOptIn })
     setSignupSuccess(true)
   }
 
@@ -496,6 +502,16 @@ function LoginPopup({
                     minLength={6}
                   />
                 </div>
+                <label htmlFor="signup-marketing-opt-in" className="flex items-start gap-3 text-sm text-gray-700">
+                  <input
+                    id="signup-marketing-opt-in"
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#0A369D] focus:ring-[#0A369D]"
+                    checked={marketingOptIn}
+                    onChange={(e) => setMarketingOptIn(e.target.checked)}
+                  />
+                  <span>I agree to receive marketing emails from HomeLens.</span>
+                </label>
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <Button type="button" variant="outline" onClick={closePopup}>Cancel</Button>
                   <Button type="submit" disabled={signupLoading} className="bg-[#0A369D] hover:bg-[#082e83]">
