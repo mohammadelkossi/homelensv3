@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { Resend } from "resend"
 
-const TO_EMAIL = "mohammad.elkossi@gmail.com"
+const TO_EMAIL = "mohammad@homelens.co"
 const FROM_EMAIL = "HomeLens Contact <onboarding@resend.dev>"
 
 export async function POST(request: NextRequest) {
