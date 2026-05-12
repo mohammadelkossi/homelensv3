@@ -39,6 +39,8 @@ export async function GET(request: Request) {
     if (error) {
       return NextResponse.redirect(new URL("/?auth_error=callback", request.url))
     }
+    redirectUrl.searchParams.set("identified", "1")
+    response.headers.set("Location", redirectUrl.toString())
   }
 
   return response
