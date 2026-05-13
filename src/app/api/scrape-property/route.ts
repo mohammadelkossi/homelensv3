@@ -4,7 +4,7 @@ import { ApifyClient } from 'apify-client';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
-import { FREE_PROPERTY_LIMIT } from '@/lib/report-generation';
+import { FREE_PROPERTY_LIMIT, freeAnalysesLimitReachedMessage } from '@/lib/report-generation';
 
 // ─── Helpers (unchanged) ────────────────────────────────────────────────────
 
@@ -616,7 +616,7 @@ export async function POST(request: NextRequest) {
 
     if (!isPro && used >= FREE_PROPERTY_LIMIT) {
       return NextResponse.json(
-        { error: 'limit_reached', message: "You've used your 3 free property analyses. Upgrade to Pro to continue." },
+        { error: 'limit_reached', message: freeAnalysesLimitReachedMessage() },
         { status: 403 }
       );
     }

@@ -91,7 +91,8 @@ function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => vo
       <Card className="relative z-10 w-full max-w-xl px-8 py-10 shadow-lg">
         <CardHeader className="p-0 pb-7">
           <CardTitle className="text-2xl">
-            You&apos;ve analysed {FREE_PROPERTY_LIMIT} properties — fancy a chat?
+            You&apos;ve analysed {FREE_PROPERTY_LIMIT}{" "}
+            {FREE_PROPERTY_LIMIT === 1 ? "property" : "properties"} — fancy a chat?
           </CardTitle>
           <CardDescription className="pt-3 text-base leading-7">
             We&apos;d love 15 minutes of your time. Tell us what you think of HomeLens and

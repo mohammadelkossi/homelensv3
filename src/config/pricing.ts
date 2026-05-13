@@ -1,3 +1,5 @@
+import { freeAnalysesFeatureLabel } from "@/lib/report-generation"
+
 export const PAYMENT_FREQUENCIES = ["monthly"];
 
 // All numeric prices are in GBP (£)
@@ -22,7 +24,7 @@ export const TIERS: PricingTier[] = [
     },
     description: "Perfect for getting started with property search",
     features: [
-      "3 full property analyses",
+      freeAnalysesFeatureLabel(),
       "Smart HomeLens score (financial + lifestyle fit)",
       "Key price insights (area averages & trends)",
       "Clear strengths & red flags for each property",

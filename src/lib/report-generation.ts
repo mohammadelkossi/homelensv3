@@ -1,6 +1,6 @@
 export const PENDING_REPORT_STORAGE_KEY = "homelens_pending_report"
 
-export const FREE_PROPERTY_LIMIT = 3
+export const FREE_PROPERTY_LIMIT = 1
 
 export type UserProfileLimit = {
   plan: string | null
@@ -23,6 +23,24 @@ export function hasFreeReportLimitReached(
 ): boolean {
   if (isProProfile(profile)) return false
   return (profile?.property_reports_used ?? 0) >= FREE_PROPERTY_LIMIT
+}
+
+export function freeAnalysesFeatureLabel(count = FREE_PROPERTY_LIMIT): string {
+  return count === 1
+    ? "1 full property analysis"
+    : `${count} full property analyses`
+}
+
+export function freeAnalysesPricingFaqAnswer(monthlyPrice = 5): string {
+  const intro =
+    FREE_PROPERTY_LIMIT === 1
+      ? "1 property is analysed free of charge"
+      : `${FREE_PROPERTY_LIMIT} properties are analysed free of charge`
+  return `${intro}, beyond this the cost is £${monthlyPrice}/month - this is to cover the heavy processing costs associated with producing reports`
+}
+
+export function freeAnalysesLimitReachedMessage(): string {
+  return `You've used your ${FREE_PROPERTY_LIMIT} free property ${FREE_PROPERTY_LIMIT === 1 ? "analysis" : "analyses"}. Upgrade to Pro to continue.`
 }
 
 export type ReportPreferences = {
