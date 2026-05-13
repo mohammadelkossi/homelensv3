@@ -13,6 +13,8 @@ import {
   type PendingOAuthSignupMetadata,
   clearPendingOAuthSignupMetadata,
 } from "@/lib/oauth-signup-metadata"
+import { FREE_PROPERTY_LIMIT } from "@/lib/report-generation"
+import { openCalendlyPopup } from "@/lib/calendly"
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -80,30 +82,49 @@ export function LoginPopupProvider({ children }: { children: React.ReactNode }) 
 
 function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter()
+  const calendlyUrl = process.env.NEXT_PUBLIC_CALENDLY_URL
+
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" aria-hidden onClick={onClose} />
-      <Card className="relative z-10 w-full max-w-md p-6 shadow-lg">
-        <CardHeader className="p-0 pb-4">
-          <CardTitle className="text-xl">You&apos;ve run out of free analyses</CardTitle>
-          <CardDescription className="pt-1">
-            You&apos;ve used your 3 free property analyses. Upgrade to Pro to continue generating reports.
+      <Card className="relative z-10 w-full max-w-xl px-8 py-10 shadow-lg">
+        <CardHeader className="p-0 pb-7">
+          <CardTitle className="text-2xl">
+            You&apos;ve analysed {FREE_PROPERTY_LIMIT} properties — fancy a chat?
+          </CardTitle>
+          <CardDescription className="pt-3 text-base leading-7">
+            We&apos;d love 15 minutes of your time. Tell us what you think of HomeLens and
+            we&apos;ll give you a free month of Pro — no strings attached. Or upgrade now for
+            less than a coffee a month.
           </CardDescription>
         </CardHeader>
-        <CardFooter className="flex gap-3 p-0 pt-4">
-          <Button variant="outline" onClick={onClose} className="flex-1">
-            Close
+        <CardFooter className="flex flex-col gap-4 p-0 pt-7">
+          <Button
+            className="h-12 w-full text-base bg-[#0A369D] hover:bg-[#082e83]"
+            disabled={!calendlyUrl}
+            onClick={() => {
+              if (!calendlyUrl) return
+              posthog.capture("limit_call_booking_clicked", { source: "limit_popup" })
+              onClose()
+              void openCalendlyPopup(calendlyUrl)
+            }}
+          >
+            Book a free 15-minute call
           </Button>
           <Button
-            className="flex-1 bg-[#0A369D] hover:bg-[#082e83]"
+            variant="outline"
+            className="h-12 w-full text-base border-[#0A369D] text-[#0A369D] hover:bg-[#0A369D]/10"
             onClick={() => {
-              posthog.capture('upgrade_to_pro_clicked', { source: 'limit_popup' })
+              posthog.capture("upgrade_to_pro_clicked", { source: "limit_popup" })
               onClose()
               router.push("/pricing")
             }}
           >
-            Upgrade to Pro
+            Upgrade for £5/month
+          </Button>
+          <Button variant="ghost" onClick={onClose} className="h-12 w-full text-base text-muted-foreground">
+            Maybe later
           </Button>
         </CardFooter>
       </Card>
