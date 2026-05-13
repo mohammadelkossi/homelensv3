@@ -4,6 +4,7 @@ import { ApifyClient } from 'apify-client';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
+import { FREE_PROPERTY_LIMIT } from '@/lib/report-generation';
 
 // ─── Helpers (unchanged) ────────────────────────────────────────────────────
 
@@ -565,8 +566,6 @@ async function getPostcodeCoordinates(postcode: string): Promise<{ latitude: num
 }
 
 // ─── Main route ─────────────────────────────────────────────────────────────
-
-const FREE_PROPERTY_LIMIT = 3;
 
 export async function POST(request: NextRequest) {
   try {

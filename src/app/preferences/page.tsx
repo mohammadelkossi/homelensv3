@@ -13,6 +13,11 @@ import { useLoginPopup } from "@/components/login-popup"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User } from "@supabase/supabase-js"
 import posthog from "posthog-js"
+import {
+  PENDING_REPORT_STORAGE_KEY,
+  hasFreeReportLimitReached,
+  type PendingReportPayload,
+} from "@/lib/report-generation"
 
 export default function PreferencesPage() {
   const { openLogin, openUpgradeLimit } = useLoginPopup()
@@ -32,7 +37,6 @@ export default function PreferencesPage() {
   const initialText = "https://www.rightmove.co.uk/properties/..."
   const [value, setValue] = useState<string>(initialText)
   const [showPreferences, setShowPreferences] = useState<boolean>(false)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
   const [location, setLocation] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [isScrolled, setIsScrolled] = useState(false)
@@ -74,83 +78,53 @@ export default function PreferencesPage() {
       return
     }
 
-    setIsLoading(true)
-    try {
-      const response = await fetch('/api/scrape-property', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          url: value.trim(),
-          postcode: location.trim() || null,
-          preferences: {
-            bedrooms: bedroomsSlider,
-            bathrooms: bathroomsSlider,
-            propertyType: propertyTypeSlider,
-            size: sizeSlider,
-            garden: gardenSlider,
-            parking: parkingSlider,
-            location: locationSlider,
-            garage: garageSlider
-          }
-        }),
-      })
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (supabaseUrl && supabaseKey) {
+      const supabase = createBrowserClient(supabaseUrl, supabaseKey)
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("plan, property_reports_used, stripe_subscription_id, stripe_status")
+        .eq("id", user.id)
+        .maybeSingle()
 
-      if (!response.ok) {
-        const data = await response.json()
-        if (response.status === 403 && data.error === 'limit_reached') {
-          posthog.capture('upgrade_limit_shown', { property_url: value.trim() })
-          openUpgradeLimit()
-          setIsLoading(false)
-          return
-        }
-        throw new Error(data.error || 'Failed to scrape property')
+      if (hasFreeReportLimitReached(profile)) {
+        posthog.capture("upgrade_limit_shown", { property_url: value.trim() })
+        openUpgradeLimit()
+        return
       }
-
-      const data = await response.json()
-      posthog.capture('report_generated', { property_url: value.trim() })
-      
-      // Navigate to results page with data in URL state
-      const params = new URLSearchParams()
-      Object.entries(data).forEach(([key, value]) => {
-        if (key === 'priceHistory' && value !== null) {
-          // Stringify array for URL param
-          params.append(key, JSON.stringify(value))
-        } else if (key === 'nearbyPlaces' && value !== null) {
-          // Stringify object for URL param
-          params.append(key, JSON.stringify(value))
-        } else if (key === 'averagePriceByYear' && value !== null) {
-          params.append(key, JSON.stringify(value))
-        } else if (value === null) {
-          // Handle null values by stringifying them
-          params.append(key, 'null')
-        } else {
-          params.append(key, String(value))
-        }
-      })
-      params.append('preferredBedroomsScore', String(bedroomsSlider))
-      params.append('preferredBathroomsScore', String(bathroomsSlider))
-      params.append('preferredPropertyTypeScore', String(propertyTypeSlider))
-      params.append('preferredSizeScore', String(sizeSlider))
-      params.append('preferredGardenScore', String(gardenSlider))
-      params.append('preferredParkingScore', String(parkingSlider))
-      params.append('preferredLocationScore', String(locationSlider))
-      params.append('preferredGarageScore', String(garageSlider))
-      // Add actual user selections
-      if (bedrooms) params.append('userBedrooms', bedrooms)
-      if (bathrooms) params.append('userBathrooms', bathrooms)
-      if (propertyType) params.append('userPropertyType', propertyType)
-      if (size) params.append('userSize', size)
-      // Add preferred postcode
-      if (location && location.trim()) params.append('preferredPostcode', location.trim())
-      router.push(`/results?${params.toString()}`)
-    } catch (error: any) {
-      posthog.capture('report_generation_failed', { property_url: value.trim(), error_message: error.message })
-      posthog.captureException(error)
-      alert(`Error: ${error.message}`)
-      setIsLoading(false)
     }
+
+    const payload: PendingReportPayload = {
+      url: value.trim(),
+      postcode: location.trim() || null,
+      preferences: {
+        bedrooms: bedroomsSlider,
+        bathrooms: bathroomsSlider,
+        propertyType: propertyTypeSlider,
+        size: sizeSlider,
+        garden: gardenSlider,
+        parking: parkingSlider,
+        location: locationSlider,
+        garage: garageSlider,
+      },
+      bedrooms,
+      bathrooms,
+      propertyType,
+      size,
+      bedroomsSlider,
+      bathroomsSlider,
+      propertyTypeSlider,
+      sizeSlider,
+      gardenSlider,
+      parkingSlider,
+      locationSlider,
+      garageSlider,
+      locationLabel: location,
+    }
+
+    sessionStorage.setItem(PENDING_REPORT_STORAGE_KEY, JSON.stringify(payload))
+    router.push("/generating")
   }
   return (
     <div className="min-h-screen bg-white" style={{ backgroundColor: '#FFFFFF' }}>
@@ -483,11 +457,10 @@ export default function PreferencesPage() {
           <div className="mt-8 flex justify-center px-2" style={{ marginTop: '5vh' }}>
             <Button 
               onClick={handleGenerateReport}
-              disabled={isLoading}
-              className="text-white border disabled:opacity-50 rounded-lg w-full sm:w-auto sm:scale-[1.521]" 
+              className="text-white border rounded-lg w-full sm:w-auto sm:scale-[1.521]" 
               style={{ fontWeight: '600', borderRadius: '0.5rem', color: '#ffffff', backgroundColor: '#0A369D', borderColor: '#0A369D' }}
             >
-              {isLoading ? 'Generating Report...' : 'Generate Report'}
+              Generate Report
             </Button>
           </div>
           </div>
