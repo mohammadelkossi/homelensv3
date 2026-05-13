@@ -6,6 +6,13 @@ declare global {
   }
 }
 
+/** Override in production via NEXT_PUBLIC_CALENDLY_URL (requires redeploy). */
+export const DEFAULT_CALENDLY_URL = "https://calendly.com/mohammad-homelens/30min"
+
+export function getCalendlyBookingUrl(): string {
+  return process.env.NEXT_PUBLIC_CALENDLY_URL || DEFAULT_CALENDLY_URL
+}
+
 let loadPromise: Promise<void> | null = null
 
 function loadCalendlyWidget(): Promise<void> {
@@ -33,7 +40,20 @@ function loadCalendlyWidget(): Promise<void> {
   return loadPromise
 }
 
-export async function openCalendlyPopup(url: string): Promise<void> {
+export function preloadCalendlyWidget(): void {
+  void loadCalendlyWidget().catch(() => {})
+}
+
+export async function openCalendlyPopup(url = getCalendlyBookingUrl()): Promise<void> {
   await loadCalendlyWidget()
-  window.Calendly?.initPopupWidget({ url })
+  if (!window.Calendly?.initPopupWidget) {
+    throw new Error("Calendly widget unavailable")
+  }
+  window.Calendly.initPopupWidget({ url })
+}
+
+export function openCalendlyBooking(url = getCalendlyBookingUrl()): void {
+  void openCalendlyPopup(url).catch(() => {
+    window.open(url, "_blank", "noopener,noreferrer")
+  })
 }

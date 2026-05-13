@@ -14,7 +14,7 @@ import {
   clearPendingOAuthSignupMetadata,
 } from "@/lib/oauth-signup-metadata"
 import { FREE_PROPERTY_LIMIT } from "@/lib/report-generation"
-import { openCalendlyPopup } from "@/lib/calendly"
+import { getCalendlyBookingUrl, openCalendlyBooking, preloadCalendlyWidget } from "@/lib/calendly"
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -82,7 +82,11 @@ export function LoginPopupProvider({ children }: { children: React.ReactNode }) 
 
 function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter()
-  const calendlyUrl = process.env.NEXT_PUBLIC_CALENDLY_URL
+  const calendlyUrl = getCalendlyBookingUrl()
+
+  useEffect(() => {
+    if (open) preloadCalendlyWidget()
+  }, [open])
 
   if (!open) return null
   return (
@@ -103,12 +107,10 @@ function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => vo
         <CardFooter className="flex flex-col gap-4 p-0 pt-7">
           <Button
             className="h-12 w-full text-base bg-[#0A369D] hover:bg-[#082e83]"
-            disabled={!calendlyUrl}
             onClick={() => {
-              if (!calendlyUrl) return
               posthog.capture("limit_call_booking_clicked", { source: "limit_popup" })
+              openCalendlyBooking(calendlyUrl)
               onClose()
-              void openCalendlyPopup(calendlyUrl)
             }}
           >
             Book a free 15-minute call
