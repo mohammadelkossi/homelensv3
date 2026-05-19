@@ -149,85 +149,226 @@ function toRadians(degrees: number): number {
 }
 
 async function getPostcodeFromCoordinates(latitude: number, longitude: number): Promise<{ fullPostcode: string | null; outcode: string | null }> {
-  if (!latitude || !longitude || !process.env.GOOGLE_MAPS_API_KEY) {
+  if (!latitude || !longitude) {
     return { fullPostcode: null, outcode: null };
   }
   try {
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${process.env.GOOGLE_MAPS_API_KEY}`
-    );
+    const url = new URL('https://api.postcodes.io/postcodes');
+    url.searchParams.set('lat', String(latitude));
+    url.searchParams.set('lon', String(longitude));
+    url.searchParams.set('limit', '1');
+    const response = await fetch(url.toString());
     if (!response.ok) return { fullPostcode: null, outcode: null };
     const data = await response.json();
-    if (data.status === 'OK' && data.results?.length > 0) {
-      for (const result of data.results) {
-        for (const component of result.address_components ?? []) {
-          if (
-            component.types?.includes('postal_code') &&
-            !component.types?.includes('postal_code_prefix')
-          ) {
-            const fullPostcode = component.long_name || component.short_name;
-            const outcode = fullPostcode?.trim().split(' ')[0] ?? null;
-            return { fullPostcode: fullPostcode ?? null, outcode };
-          }
-        }
-      }
-    }
-    return { fullPostcode: null, outcode: null };
+    const fullPostcode = data.status === 200 ? data.result?.[0]?.postcode : null;
+    if (!fullPostcode) return { fullPostcode: null, outcode: null };
+    const outcode = fullPostcode.trim().split(' ')[0] ?? null;
+    return { fullPostcode, outcode };
   } catch (error) {
     console.error('Error fetching postcode from coordinates:', error);
     return { fullPostcode: null, outcode: null };
   }
 }
 
-async function getNearbyPlaces(
+type NearbyPlace = { name: string; distance: number };
+
+type AmenityCategory =
+  | 'school'
+  | 'station'
+  | 'park'
+  | 'supermarket'
+  | 'church'
+  | 'mosque'
+  | 'synagogue'
+  | 'hindu_temple'
+  | 'gym'
+  | 'hospital';
+
+type OverpassElement = {
+  type: string;
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+};
+
+const OVERPASS_AMENITY_RADIUS_M = 5000;
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+
+function getOverpassElementCoords(element: OverpassElement): { lat: number; lon: number } | null {
+  if (element.lat != null && element.lon != null) return { lat: element.lat, lon: element.lon };
+  if (element.center) return { lat: element.center.lat, lon: element.center.lon };
+  return null;
+}
+
+function categorizeOverpassAmenity(tags: Record<string, string>): AmenityCategory | null {
+  const amenity = tags.amenity;
+  const shop = tags.shop;
+  const leisure = tags.leisure;
+  const railway = tags.railway;
+  const religion = (tags.religion || '').toLowerCase();
+  const landuse = tags.landuse;
+  const publicTransport = tags.public_transport;
+
+  if (amenity === 'hospital') return 'hospital';
+  if (amenity === 'school' || amenity === 'college' || tags.building === 'school') return 'school';
+  if (leisure === 'fitness_centre' || leisure === 'sports_centre' || amenity === 'gym') return 'gym';
+  if (leisure === 'park' || leisure === 'garden' || landuse === 'recreation_ground') return 'park';
+  if (shop === 'supermarket') return 'supermarket';
+  if (
+    railway === 'station' ||
+    railway === 'halt' ||
+    amenity === 'bus_station' ||
+    publicTransport === 'station'
+  ) {
+    return 'station';
+  }
+  if (amenity === 'place_of_worship') {
+    if (religion === 'muslim') return 'mosque';
+    if (religion === 'jewish') return 'synagogue';
+    if (religion === 'hindu') return 'hindu_temple';
+    return 'church';
+  }
+  if (tags.building === 'church') return 'church';
+  return null;
+}
+
+function buildOverpassAmenityQuery(latitude: number, longitude: number, radiusMeters: number): string {
+  const around = `(around:${radiusMeters},${latitude},${longitude})`;
+  const selectors = [
+    `node["amenity"="school"]${around}`,
+    `way["amenity"="school"]${around}`,
+    `node["amenity"="college"]${around}`,
+    `way["amenity"="college"]${around}`,
+    `node["railway"="station"]${around}`,
+    `way["railway"="station"]${around}`,
+    `node["railway"="halt"]${around}`,
+    `way["railway"="halt"]${around}`,
+    `node["public_transport"="station"]${around}`,
+    `way["public_transport"="station"]${around}`,
+    `node["amenity"="bus_station"]${around}`,
+    `way["amenity"="bus_station"]${around}`,
+    `node["leisure"="park"]${around}`,
+    `way["leisure"="park"]${around}`,
+    `node["leisure"="garden"]${around}`,
+    `way["leisure"="garden"]${around}`,
+    `node["landuse"="recreation_ground"]${around}`,
+    `way["landuse"="recreation_ground"]${around}`,
+    `node["shop"="supermarket"]${around}`,
+    `way["shop"="supermarket"]${around}`,
+    `node["amenity"="place_of_worship"]${around}`,
+    `way["amenity"="place_of_worship"]${around}`,
+    `node["building"="church"]${around}`,
+    `way["building"="church"]${around}`,
+    `node["leisure"="fitness_centre"]${around}`,
+    `way["leisure"="fitness_centre"]${around}`,
+    `node["leisure"="sports_centre"]${around}`,
+    `way["leisure"="sports_centre"]${around}`,
+    `node["amenity"="gym"]${around}`,
+    `way["amenity"="gym"]${around}`,
+    `node["amenity"="hospital"]${around}`,
+    `way["amenity"="hospital"]${around}`,
+  ];
+  return `[out:json][timeout:25];(${selectors.join(';')};);out center tags;`;
+}
+
+async function fetchOverpassAmenities(
   latitude: number,
   longitude: number,
-  type: string,
-  maxResults: number = 3
-): Promise<Array<{ name: string; distance: number; address: string; rating?: number }>> {
-  if (!latitude || !longitude || !process.env.GOOGLE_MAPS_API_KEY) return [];
-  try {
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=5000&type=${type}&key=${process.env.GOOGLE_MAPS_API_KEY}`
-    );
-    if (!response.ok) return [];
-    const data = await response.json();
-    if (data.status !== 'OK' || !data.results?.length) return [];
-    return data.results
-      .map((place: any) => ({
-        name: place.name || 'Unknown',
-        distance: place.geometry?.location
-          ? calculateDistance(latitude, longitude, place.geometry.location.lat, place.geometry.location.lng)
-          : 0,
-        address: place.vicinity || place.formatted_address || 'Address not available',
-        rating: place.rating || undefined,
-      }))
-      .sort((a: any, b: any) => a.distance - b.distance)
-      .slice(0, maxResults);
-  } catch (error) {
-    console.error(`Error fetching nearby ${type} places:`, error);
+  radiusMeters: number = OVERPASS_AMENITY_RADIUS_M
+): Promise<OverpassElement[]> {
+  const query = buildOverpassAmenityQuery(latitude, longitude, radiusMeters);
+  const response = await fetch(OVERPASS_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': 'HomeLens/1.0 (property report amenities)',
+    },
+    body: `data=${encodeURIComponent(query)}`,
+  });
+  if (!response.ok) {
+    console.error('Overpass API error:', response.status, await response.text().catch(() => ''));
     return [];
   }
+  const data = await response.json();
+  return Array.isArray(data.elements) ? data.elements : [];
+}
+
+function takeNearestPlaces(
+  places: NearbyPlace[],
+  maxResults: number
+): NearbyPlace[] {
+  return [...places].sort((a, b) => a.distance - b.distance).slice(0, maxResults);
 }
 
 async function getAllNearbyPlaces(latitude: number, longitude: number) {
-  const [schools, stations, parks, supermarkets, churches, mosques, synagogues, hinduTemples, gyms, hospitals] =
-    await Promise.all([
-      getNearbyPlaces(latitude, longitude, 'school', 3),
-      getNearbyPlaces(latitude, longitude, 'transit_station', 3),
-      getNearbyPlaces(latitude, longitude, 'park', 3),
-      getNearbyPlaces(latitude, longitude, 'supermarket', 3),
-      getNearbyPlaces(latitude, longitude, 'church', 3),
-      getNearbyPlaces(latitude, longitude, 'mosque', 3),
-      getNearbyPlaces(latitude, longitude, 'synagogue', 3),
-      getNearbyPlaces(latitude, longitude, 'hindu_temple', 3),
-      getNearbyPlaces(latitude, longitude, 'gym', 3),
-      getNearbyPlaces(latitude, longitude, 'hospital', 3),
-    ]);
-  const placesOfWorship = [...churches, ...mosques, ...synagogues, ...hinduTemples]
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, 3);
-  return { schools, stations, parks, supermarkets, placesOfWorship, gyms, hospitals };
+  const empty = {
+    schools: [] as NearbyPlace[],
+    stations: [] as NearbyPlace[],
+    parks: [] as NearbyPlace[],
+    supermarkets: [] as NearbyPlace[],
+    placesOfWorship: [] as NearbyPlace[],
+    gyms: [] as NearbyPlace[],
+    hospitals: [] as NearbyPlace[],
+  };
+
+  if (!latitude || !longitude) return empty;
+
+  try {
+    const elements = await fetchOverpassAmenities(latitude, longitude);
+    const buckets: Record<AmenityCategory, NearbyPlace[]> = {
+      school: [],
+      station: [],
+      park: [],
+      supermarket: [],
+      church: [],
+      mosque: [],
+      synagogue: [],
+      hindu_temple: [],
+      gym: [],
+      hospital: [],
+    };
+    const seen = new Set<string>();
+
+    for (const element of elements) {
+      const tags = element.tags;
+      if (!tags?.name) continue;
+
+      const category = categorizeOverpassAmenity(tags);
+      if (!category) continue;
+
+      const coords = getOverpassElementCoords(element);
+      if (!coords) continue;
+
+      const dedupeKey = `${category}:${element.type}/${element.id}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      buckets[category].push({
+        name: tags.name,
+        distance: calculateDistance(latitude, longitude, coords.lat, coords.lon),
+      });
+    }
+
+    const placesOfWorship = takeNearestPlaces(
+      [...buckets.church, ...buckets.mosque, ...buckets.synagogue, ...buckets.hindu_temple],
+      3
+    );
+
+    return {
+      schools: takeNearestPlaces(buckets.school, 3),
+      stations: takeNearestPlaces(buckets.station, 3),
+      parks: takeNearestPlaces(buckets.park, 3),
+      supermarkets: takeNearestPlaces(buckets.supermarket, 3),
+      placesOfWorship,
+      gyms: takeNearestPlaces(buckets.gym, 3),
+      hospitals: takeNearestPlaces(buckets.hospital, 3),
+    };
+  } catch (error) {
+    console.error('Error fetching nearby places from Overpass:', error);
+    return empty;
+  }
 }
 
 // ─── Address / price helpers (unchanged) ────────────────────────────────────

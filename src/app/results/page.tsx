@@ -117,13 +117,13 @@ function ResultsPageContent() {
 
   // Parse nearby places from URL params
   let nearbyPlaces: {
-    schools: Array<{ name: string; distance: number; address: string; rating?: number }>;
-    stations: Array<{ name: string; distance: number; address: string; rating?: number }>;
-    parks: Array<{ name: string; distance: number; address: string; rating?: number }>;
-    supermarkets: Array<{ name: string; distance: number; address: string; rating?: number }>;
-    placesOfWorship: Array<{ name: string; distance: number; address: string; rating?: number }>;
-    gyms: Array<{ name: string; distance: number; address: string; rating?: number }>;
-    hospitals: Array<{ name: string; distance: number; address: string; rating?: number }>;
+    schools: Array<{ name: string; distance: number }>;
+    stations: Array<{ name: string; distance: number }>;
+    parks: Array<{ name: string; distance: number }>;
+    supermarkets: Array<{ name: string; distance: number }>;
+    placesOfWorship: Array<{ name: string; distance: number }>;
+    gyms: Array<{ name: string; distance: number }>;
+    hospitals: Array<{ name: string; distance: number }>;
   } | null = null
   const nearbyPlacesParam = searchParams.get('nearbyPlaces')
   if (nearbyPlacesParam && nearbyPlacesParam !== 'null') {
@@ -462,7 +462,7 @@ function ResultsPageContent() {
   const transformNearbyPlaces = () => {
     if (!nearbyPlaces) return []
     
-    const amenities: Array<{ category: string; name: string; distance: number; address: string }> = []
+    const amenities: Array<{ category: string; name: string; distance: number }> = []
     
     // Convert miles to km (1 mile = 1.60934 km)
     const milesToKm = (miles: number) => miles * 1.60934
@@ -473,7 +473,6 @@ function ResultsPageContent() {
           category: 'School',
           name: school.name,
           distance: milesToKm(school.distance),
-          address: school.address
         })
       })
     }
@@ -484,7 +483,6 @@ function ResultsPageContent() {
           category: 'Station',
           name: station.name,
           distance: milesToKm(station.distance),
-          address: station.address
         })
       })
     }
@@ -495,7 +493,6 @@ function ResultsPageContent() {
           category: 'Park',
           name: park.name,
           distance: milesToKm(park.distance),
-          address: park.address
         })
       })
     }
@@ -506,7 +503,6 @@ function ResultsPageContent() {
           category: 'Supermarket',
           name: supermarket.name,
           distance: milesToKm(supermarket.distance),
-          address: supermarket.address
         })
       })
     }
@@ -517,7 +513,6 @@ function ResultsPageContent() {
           category: 'Place of Worship',
           name: place.name,
           distance: milesToKm(place.distance),
-          address: place.address
         })
       })
     }
@@ -528,7 +523,6 @@ function ResultsPageContent() {
           category: 'Gym',
           name: gym.name,
           distance: milesToKm(gym.distance),
-          address: gym.address
         })
       })
     }
@@ -539,7 +533,6 @@ function ResultsPageContent() {
           category: 'Hospital',
           name: hospital.name,
           distance: milesToKm(hospital.distance),
-          address: hospital.address
         })
       })
     }
@@ -2373,7 +2366,6 @@ function ResultsPageContent() {
                   <th className="px-6 py-4 text-left font-semibold" style={{ color: '#000000' }}>Category</th>
                   <th className="px-6 py-4 text-left font-semibold" style={{ color: '#000000' }}>Name</th>
                   <th className="px-6 py-4 text-left font-semibold" style={{ color: '#000000' }}>Distance</th>
-                  <th className="px-6 py-4 text-left font-semibold" style={{ color: '#000000' }}>Address</th>
                 </tr>
               </thead>
               <tbody>
@@ -2383,7 +2375,6 @@ function ResultsPageContent() {
                     <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>School</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.name}</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.distance.toFixed(2)} km</td>
-                    <td className="px-6 py-4" style={{ color: '#000000' }}>{place.address}</td>
                   </tr>
                 ))}
                 {/* Stations */}
@@ -2392,7 +2383,6 @@ function ResultsPageContent() {
                     <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Station</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.name}</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.distance.toFixed(2)} km</td>
-                    <td className="px-6 py-4" style={{ color: '#000000' }}>{place.address}</td>
                   </tr>
                 ))}
                 {/* Parks */}
@@ -2401,7 +2391,6 @@ function ResultsPageContent() {
                     <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Park</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.name}</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.distance.toFixed(2)} km</td>
-                    <td className="px-6 py-4" style={{ color: '#000000' }}>{place.address}</td>
                   </tr>
                 ))}
                 {/* Supermarkets */}
@@ -2410,7 +2399,6 @@ function ResultsPageContent() {
                     <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Supermarket</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.name}</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.distance.toFixed(2)} km</td>
-                    <td className="px-6 py-4" style={{ color: '#000000' }}>{place.address}</td>
                   </tr>
                 ))}
                 {/* Places of Worship */}
@@ -2419,7 +2407,6 @@ function ResultsPageContent() {
                     <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Place of Worship</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.name}</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.distance.toFixed(2)} km</td>
-                    <td className="px-6 py-4" style={{ color: '#000000' }}>{place.address}</td>
                   </tr>
                 ))}
                 {/* Gyms */}
@@ -2428,7 +2415,6 @@ function ResultsPageContent() {
                     <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Gym</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.name}</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.distance.toFixed(2)} km</td>
-                    <td className="px-6 py-4" style={{ color: '#000000' }}>{place.address}</td>
                   </tr>
                 ))}
                 {/* Hospitals */}
@@ -2437,7 +2423,6 @@ function ResultsPageContent() {
                     <td className="px-6 py-4 font-semibold" style={{ color: '#000000' }}>Hospital</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.name}</td>
                     <td className="px-6 py-4" style={{ color: '#000000' }}>{place.distance.toFixed(2)} km</td>
-                    <td className="px-6 py-4" style={{ color: '#000000' }}>{place.address}</td>
                   </tr>
                 ))}
               </tbody>

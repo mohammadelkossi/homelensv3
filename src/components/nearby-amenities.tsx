@@ -10,7 +10,6 @@ interface NearbyAmenitiesProps {
     category: string
     name: string
     distance: number
-    address: string
   }[]
 }
 
@@ -88,8 +87,7 @@ export function NearbyAmenities({ amenities }: NearbyAmenitiesProps) {
                       {amenity.distance.toFixed(2)} km
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{amenity.address}</p>
-                  <span className="text-xs text-muted-foreground/70">{amenity.category}</span>
+                  <span className="text-xs text-muted-foreground/70 mt-0.5">{amenity.category}</span>
                 </div>
               </div>
             )
