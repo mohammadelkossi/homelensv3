@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { LoginPopupProvider } from "@/components/login-popup";
 import { PostHogProvider } from "@/components/posthog-provider";
+import { TypeformEmbed } from "@/components/typeform-embed";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,6 +40,7 @@ export default function RootLayout({
         <LoginPopupProvider>
           {children}
         </LoginPopupProvider>
+        <TypeformEmbed />
       </body>
     </html>
   );
