@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr"
 import { Resend } from "resend"
 
 const TO_EMAIL = "mohammad@homelens.co"
-const FROM_EMAIL = "HomeLens Contact <onboarding@resend.dev>"
+const FROM_EMAIL = "HomeLens Contact <noreply@homelens.co>"
 
 export async function POST(request: NextRequest) {
   try {
