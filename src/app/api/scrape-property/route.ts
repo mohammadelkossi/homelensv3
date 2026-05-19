@@ -638,7 +638,7 @@ export async function POST(request: NextRequest) {
     let attempts = 0;
     const maxAttempts = 60;
     while (!runFinished && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const runInfo = await apifyClient.run(run.id).get();
       if (!runInfo) return NextResponse.json({ error: 'Failed to get run info' }, { status: 500 });
       if (runInfo.status === 'SUCCEEDED') {
