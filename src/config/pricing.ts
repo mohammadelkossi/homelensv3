@@ -21,8 +21,6 @@ const PRO_FEATURES = [
   "Smart HomeLens score (financial + lifestyle fit)",
   "Key price insights (area averages & trends)",
   "Clear strengths & red flags for each property",
-  "Save interested properties",
-  "Download & share reports",
 ] as const;
 
 export const TIERS: PricingTier[] = [
@@ -38,7 +36,6 @@ export const TIERS: PricingTier[] = [
     description: "Ideal for serious home buyers and investors",
     features: [...PRO_FEATURES, "Cancel anytime"],
     cta: "Subscribe for £8/month",
-    popular: true,
   },
   {
     id: "pro-lifetime",
@@ -53,5 +50,6 @@ export const TIERS: PricingTier[] = [
     features: [...PRO_FEATURES, "Lifetime access — no subscription"],
     cta: "Get lifetime access for £21",
     highlighted: true,
+    popular: true,
   },
 ];

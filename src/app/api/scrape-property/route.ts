@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import {
   hasFreeReportLimitReached,
-  freeAnalysesLimitReachedMessage,
+  reportLimitReachedMessage,
   isProProfile,
 } from '@/lib/report-generation';
 
@@ -756,7 +756,7 @@ export async function POST(request: NextRequest) {
 
     if (hasFreeReportLimitReached(profile, user.created_at)) {
       return NextResponse.json(
-        { error: 'limit_reached', message: freeAnalysesLimitReachedMessage(user.created_at) },
+        { error: 'limit_reached', message: reportLimitReachedMessage() },
         { status: 403 }
       );
     }
@@ -867,7 +867,7 @@ export async function POST(request: NextRequest) {
       averagePricePerSqmMatchedSaleCount: pricePerSqmStats?.matchedSaleCount ?? 0,
     };
 
-    // Increment usage counter for non-Pro (grandfathered free tier)
+    // Increment usage counter for non-Pro users with a report allowance
     if (!isProProfile(profile)) {
       const used = profile?.property_reports_used ?? 0;
       const newCount = used + 1;

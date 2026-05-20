@@ -27,7 +27,7 @@ export const PricingCard = ({
         isHighlighted
           ? "bg-gray-100 text-black border-gray-300"
           : "bg-white text-black border-gray-200",
-        isPopular && "outline outline-[rgba(120,119,198)]",
+        isPopular && "outline outline-[#0A369D]/40",
       )}
     >
       {/* Background Decoration */}
@@ -38,7 +38,7 @@ export const PricingCard = ({
       <h2 className="flex items-center gap-3 text-xl font-medium capitalize" style={{ color: '#000000' }}>
         {tier.name}
         {isPopular && (
-          <Badge className="mt-1 bg-orange-600 px-2 py-0.5 text-xs text-white hover:bg-orange-600">
+          <Badge className="mt-1 bg-[#0A369D] px-2 py-0.5 text-xs text-white hover:bg-[#082e83]">
             🔥 Most Popular
           </Badge>
         )}
@@ -129,6 +129,6 @@ const HighlightedBackground = () => (
 
 // Popular Background Component
 const PopularBackground = () => (
-  <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.1),rgba(255,255,255,0))] dark:bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))]" />
+  <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(10,54,157,0.12),rgba(255,255,255,0))]" />
 );
 

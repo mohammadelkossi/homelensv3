@@ -47,7 +47,7 @@ export default function Home() {
             <div className="mt-8 flex justify-start">
               <Link href="/preferences">
                 <Button onClick={() => posthog.capture('get_started_clicked', { location: 'hero' })} style={{ padding: '12px 32px', fontSize: '18px', borderRadius: '8px', backgroundColor: '#0A369D', color: 'white', border: 'none', cursor: 'pointer' }}>
-                  Get Started for Free
+                  Get Started
                 </Button>
               </Link>
             </div>

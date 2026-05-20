@@ -1,6 +1,6 @@
 export const PENDING_REPORT_STORAGE_KEY = "homelens_pending_report"
 
-/** Grandfathered accounts (created before cutoff) may use this many free reports. */
+/** Legacy allowance for accounts created before the pricing cutoff. */
 export const GRANDFATHERED_FREE_PROPERTY_LIMIT = 1
 
 /** Stripe profile status for £21 lifetime (one-time) purchasers. */
@@ -22,7 +22,7 @@ export function getGrandfatherCutoff(): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-/** Free report allowance: 1 for pre-cutoff accounts, 0 for new signups. */
+/** Report allowance before upgrade: 1 for pre-cutoff accounts, 0 for new signups. */
 export function getFreePropertyLimitForUser(
   userCreatedAt: string | null | undefined
 ): number {
@@ -52,18 +52,19 @@ export function hasFreeReportLimitReached(
   return (profile?.property_reports_used ?? 0) >= limit
 }
 
+export function reportLimitReachedMessage(): string {
+  return "You've reached your report limit. Upgrade to Pro to continue analysing properties."
+}
+
+/** @deprecated Use reportLimitReachedMessage */
 export function freeAnalysesLimitReachedMessage(
-  userCreatedAt?: string | null
+  _userCreatedAt?: string | null
 ): string {
-  const limit = getFreePropertyLimitForUser(userCreatedAt)
-  if (limit === 0) {
-    return "Upgrade to Pro to analyse properties."
-  }
-  return `You've used your ${limit} free property ${limit === 1 ? "analysis" : "analyses"}. Upgrade to Pro to continue.`
+  return reportLimitReachedMessage()
 }
 
 export function pricingFaqAnswer(): string {
-  return "Pro is £8/month or £21 for lifetime access. If you signed up before our latest pricing change and haven't used your free analysis yet, you can still run one report before upgrading."
+  return "Pro is £8/month or £21 for lifetime access. Both include full property analysis and HomeLens scores."
 }
 
 export type ReportPreferences = {

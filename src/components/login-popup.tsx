@@ -13,7 +13,6 @@ import {
   type PendingOAuthSignupMetadata,
   clearPendingOAuthSignupMetadata,
 } from "@/lib/oauth-signup-metadata"
-import { getFreePropertyLimitForUser } from "@/lib/report-generation"
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -81,28 +80,6 @@ export function LoginPopupProvider({ children }: { children: React.ReactNode }) 
 
 function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter()
-  const [limitMessage, setLimitMessage] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!url || !key) {
-      setLimitMessage("Upgrade to Pro to keep analysing properties.")
-      return
-    }
-    const supabase = createBrowserClient(url, key)
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      const limit = getFreePropertyLimitForUser(user?.created_at)
-      if (limit === 0) {
-        setLimitMessage("Upgrade to Pro to analyse properties.")
-      } else {
-        setLimitMessage(
-          `You've used your ${limit} free property ${limit === 1 ? "analysis" : "analyses"}.`
-        )
-      }
-    })
-  }, [open])
 
   if (!open) return null
   return (
@@ -111,10 +88,10 @@ function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => vo
       <Card className="relative z-10 w-full max-w-xl px-8 py-10 shadow-lg">
         <CardHeader className="p-0 pb-7">
           <CardTitle className="text-2xl">
-            {limitMessage ?? "Upgrade to Pro to continue"}
+            Upgrade to Pro to continue
           </CardTitle>
           <CardDescription className="pt-3 text-base leading-7">
-            Upgrade to Pro to keep analysing properties, save listings, and download reports.
+            Upgrade to Pro to keep analysing properties and access full reports.
           </CardDescription>
         </CardHeader>
         <CardFooter className="flex flex-col gap-4 p-0 pt-7">
