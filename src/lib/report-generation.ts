@@ -63,10 +63,6 @@ export function freeAnalysesLimitReachedMessage(
   return reportLimitReachedMessage()
 }
 
-export function pricingFaqAnswer(): string {
-  return "Pro is £8/month or £21 for lifetime access. Both include full property analysis and HomeLens scores."
-}
-
 export type ReportPreferences = {
   bedrooms: number
   bathrooms: number
