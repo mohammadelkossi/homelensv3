@@ -20,7 +20,7 @@ import {
 } from "@/lib/report-generation"
 
 export default function PreferencesPage() {
-  const { openLogin, openUpgradeLimit } = useLoginPopup()
+  const { openUpgradeLimit } = useLoginPopup()
   const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
@@ -70,7 +70,8 @@ export default function PreferencesPage() {
 
   const handleGenerateReport = async () => {
     if (!user) {
-      openLogin()
+      posthog.capture("generate_report_redirect_pricing", { reason: "not_signed_in" })
+      router.push("/pricing")
       return
     }
     if (!value || value === initialText || value.trim() === '') {
