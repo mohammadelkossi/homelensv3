@@ -9,7 +9,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { Award, BarChart3, Calculator, Calendar, ChevronDown, ChevronUp, Heart, LineChart, Map, MapPin, PoundSterling, Star, TrendingUp } from "lucide-react"
 import posthog from "posthog-js"
-import { freeAnalysesPricingFaqAnswer } from "@/lib/report-generation"
+import { pricingFaqAnswer } from "@/lib/report-generation"
 
 export default function Home() {
   const [openFAQ, setOpenFAQ] = useState<number | null>(null)
@@ -209,7 +209,7 @@ export default function Home() {
               },
               {
                 question: 'How much does HomeLens cost?',
-                answer: freeAnalysesPricingFaqAnswer(),
+                answer: pricingFaqAnswer(),
               },
               {
                 question: 'What if the information is not publicly available?',

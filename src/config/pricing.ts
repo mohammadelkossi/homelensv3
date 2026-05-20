@@ -1,12 +1,14 @@
-import { freeAnalysesFeatureLabel } from "@/lib/report-generation"
-
 export const PAYMENT_FREQUENCIES = ["monthly"];
+
+export type CheckoutPlan = "monthly" | "lifetime";
 
 // All numeric prices are in GBP (£)
 export interface PricingTier {
   name: string;
   id: string;
+  checkoutPlan: CheckoutPlan;
   price: Record<string, number | string>;
+  priceLabel?: string;
   description: string;
   features: string[];
   cta: string;
@@ -14,44 +16,42 @@ export interface PricingTier {
   popular?: boolean;
 }
 
+const PRO_FEATURES = [
+  "50 property analyses/month",
+  "Smart HomeLens score (financial + lifestyle fit)",
+  "Key price insights (area averages & trends)",
+  "Clear strengths & red flags for each property",
+  "Save interested properties",
+  "Download & share reports",
+] as const;
+
 export const TIERS: PricingTier[] = [
   {
-    id: "basic",
-    name: "Basic",
+    id: "pro-monthly",
+    name: "Pro Monthly",
+    checkoutPlan: "monthly",
     price: {
-      monthly: "Free",
-      yearly: "Free",
+      monthly: 8,
+      yearly: 8,
     },
-    description: "Perfect for getting started with property search",
-    features: [
-      freeAnalysesFeatureLabel(),
-      "Smart HomeLens score (financial + lifestyle fit)",
-      "Key price insights (area averages & trends)",
-      "Clear strengths & red flags for each property",
-      "No card required",
-      "❌ No saved properties",
-      "❌ No share & download reports",
-    ],
-    cta: "Get started for free",
+    priceLabel: "Per month",
+    description: "Ideal for serious home buyers and investors",
+    features: [...PRO_FEATURES, "Cancel anytime"],
+    cta: "Subscribe for £8/month",
+    popular: true,
   },
   {
-    id: "professional",
-    name: "Pro",
+    id: "pro-lifetime",
+    name: "Pro Lifetime",
+    checkoutPlan: "lifetime",
     price: {
-      monthly: 5,
-      yearly: 5,
+      monthly: 21,
+      yearly: 21,
     },
-    description: "Ideal for serious home buyers and investors",
-    features: [
-      "50 property analyses/month",
-      "Smart HomeLens score (financial + lifestyle fit)",
-      "Key price insights (area averages & trends)",
-      "Clear strengths & red flags for each property",
-      "Save interested properties",
-      "Download & share reports",
-      "Cancel anytime",
-    ],
-    cta: "Sign Up",
+    priceLabel: "One-time payment",
+    description: "Pay once, keep Pro access for life",
+    features: [...PRO_FEATURES, "Lifetime access — no subscription"],
+    cta: "Get lifetime access for £21",
+    highlighted: true,
   },
 ];
-

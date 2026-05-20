@@ -4,7 +4,11 @@ import { ApifyClient } from 'apify-client';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
-import { FREE_PROPERTY_LIMIT, freeAnalysesLimitReachedMessage } from '@/lib/report-generation';
+import {
+  hasFreeReportLimitReached,
+  freeAnalysesLimitReachedMessage,
+  isProProfile,
+} from '@/lib/report-generation';
 
 // ─── Helpers (unchanged) ────────────────────────────────────────────────────
 
@@ -750,14 +754,9 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .maybeSingle();
 
-    const isPro =
-      profile?.plan === 'pro' ||
-      (!!profile?.stripe_subscription_id && ['active', 'trialing'].includes(profile?.stripe_status ?? ''));
-    const used = profile?.property_reports_used ?? 0;
-
-    if (!isPro && used >= FREE_PROPERTY_LIMIT) {
+    if (hasFreeReportLimitReached(profile, user.created_at)) {
       return NextResponse.json(
-        { error: 'limit_reached', message: freeAnalysesLimitReachedMessage() },
+        { error: 'limit_reached', message: freeAnalysesLimitReachedMessage(user.created_at) },
         { status: 403 }
       );
     }
@@ -868,8 +867,9 @@ export async function POST(request: NextRequest) {
       averagePricePerSqmMatchedSaleCount: pricePerSqmStats?.matchedSaleCount ?? 0,
     };
 
-    // Increment usage counter
-    if (!isPro) {
+    // Increment usage counter for non-Pro (grandfathered free tier)
+    if (!isProProfile(profile)) {
+      const used = profile?.property_reports_used ?? 0;
       const newCount = used + 1;
       if (profile) {
         await supabaseAdmin.from('profiles').update({ property_reports_used: newCount }).eq('id', user.id);

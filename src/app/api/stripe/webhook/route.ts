@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
 import { getPostHogClient } from "@/lib/posthog-server"
+import { STRIPE_PRO_STATUS_LIFETIME } from "@/lib/report-generation"
 
 /**
  * Stripe webhook handler. Uses raw body for signature verification —
@@ -52,7 +53,6 @@ export async function POST(request: NextRequest) {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-  /** Derive plan from Stripe subscription status. */
   function planForStatus(status: string): "pro" | "free" {
     if (status === "active" || status === "trialing") return "pro"
     if (status === "canceled" || status === "incomplete_expired" || status === "unpaid") return "free"
@@ -65,7 +65,6 @@ export async function POST(request: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session
         const clientReferenceId = session.client_reference_id
         const customer = session.customer
-        const subscription = session.subscription
 
         if (!clientReferenceId) {
           console.error("[Stripe Webhook] checkout.session.completed missing client_reference_id")
@@ -73,33 +72,63 @@ export async function POST(request: NextRequest) {
         }
 
         const customerId = typeof customer === "string" ? customer : customer?.id ?? null
+        if (!customerId) {
+          console.error("[Stripe Webhook] checkout.session.completed missing customer")
+          break
+        }
+
+        console.log("[Stripe Webhook] User ID being updated (checkout.session.completed):", clientReferenceId)
+
+        if (session.mode === "payment") {
+          const { error: upsertError } = await supabase.from("profiles").upsert(
+            {
+              id: clientReferenceId,
+              plan: "pro",
+              stripe_customer_id: customerId,
+              stripe_subscription_id: null,
+              stripe_status: STRIPE_PRO_STATUS_LIFETIME,
+            },
+            { onConflict: "id" }
+          )
+
+          if (upsertError) {
+            console.error("[Stripe Webhook] Supabase upsert error (lifetime):", upsertError)
+            return NextResponse.json({ error: "Update failed" }, { status: 500 })
+          }
+
+          const posthogLifetime = getPostHogClient()
+          posthogLifetime.capture({
+            distinctId: clientReferenceId,
+            event: "lifetime_purchase_activated",
+            properties: { plan: "pro", billing: "lifetime" },
+          })
+          break
+        }
+
+        const subscription = session.subscription
         const subscriptionId =
           typeof subscription === "string" ? subscription : (subscription as Stripe.Subscription)?.id ?? null
 
-        if (!customerId || !subscriptionId) {
-          console.error(
-            "[Stripe Webhook] checkout.session.completed missing customer or subscription",
-            { customerId, subscriptionId }
-          )
+        if (!subscriptionId) {
+          console.error("[Stripe Webhook] checkout.session.completed missing subscription")
           break
         }
 
         const subscriptionObj = await stripe.subscriptions.retrieve(subscriptionId)
         const status = subscriptionObj.status
 
-        console.log("[Stripe Webhook] User ID being updated (checkout.session.completed):", clientReferenceId)
         console.log("[Stripe Webhook] Subscription status from Stripe:", status)
 
-        const profileRow = {
-          id: clientReferenceId,
-          plan: planForStatus(status),
-          stripe_customer_id: customerId,
-          stripe_subscription_id: subscriptionId,
-          stripe_status: status,
-        }
-        const { error: upsertError } = await supabase
-          .from("profiles")
-          .upsert(profileRow, { onConflict: "id" })
+        const { error: upsertError } = await supabase.from("profiles").upsert(
+          {
+            id: clientReferenceId,
+            plan: planForStatus(status),
+            stripe_customer_id: customerId,
+            stripe_subscription_id: subscriptionId,
+            stripe_status: status,
+          },
+          { onConflict: "id" }
+        )
 
         if (upsertError) {
           console.error("[Stripe Webhook] Supabase upsert error (profiles):", upsertError)
@@ -125,18 +154,9 @@ export async function POST(request: NextRequest) {
         const subscriptionId = subscription.id
         const status = subscription.status
 
-        console.log(
-          "[Stripe Webhook] Subscription status update:",
-          event.type,
-          "subscription_id:",
-          subscriptionId,
-          "status:",
-          status
-        )
-
         const { data: profile, error: findError } = await supabase
           .from("profiles")
-          .select("id")
+          .select("id, stripe_status")
           .eq("stripe_subscription_id", subscriptionId)
           .maybeSingle()
 
@@ -150,7 +170,10 @@ export async function POST(request: NextRequest) {
           break
         }
 
-        console.log("[Stripe Webhook] User ID being updated (subscription status):", profile.id)
+        if (profile.stripe_status === STRIPE_PRO_STATUS_LIFETIME) {
+          console.log("[Stripe Webhook] Skipping subscription update for lifetime user:", profile.id)
+          break
+        }
 
         const { error: updateError } = await supabase
           .from("profiles")
@@ -171,14 +194,9 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription
         const subscriptionId = subscription.id
 
-        console.log(
-          "[Stripe Webhook] Subscription deleted, finding profile by stripe_subscription_id:",
-          subscriptionId
-        )
-
         const { data: profile, error: findError } = await supabase
           .from("profiles")
-          .select("id")
+          .select("id, stripe_status")
           .eq("stripe_subscription_id", subscriptionId)
           .maybeSingle()
 
@@ -192,7 +210,10 @@ export async function POST(request: NextRequest) {
           break
         }
 
-        console.log("[Stripe Webhook] User ID being updated (customer.subscription.deleted):", profile.id)
+        if (profile.stripe_status === STRIPE_PRO_STATUS_LIFETIME) {
+          console.log("[Stripe Webhook] Skipping cancel downgrade for lifetime user:", profile.id)
+          break
+        }
 
         const { error: updateError } = await supabase
           .from("profiles")
@@ -211,9 +232,7 @@ export async function POST(request: NextRequest) {
         posthogCancel.capture({
           distinctId: profile.id,
           event: "subscription_canceled",
-          properties: {
-            stripe_subscription_id: subscriptionId,
-          },
+          properties: { stripe_subscription_id: subscriptionId },
         })
         break
       }

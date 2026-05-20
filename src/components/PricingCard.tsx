@@ -62,8 +62,8 @@ export const PricingCard = ({
             <span className="text-4xl font-medium block -translate-y-[60%]" style={{ color: '#000000' }}>{price}</span>
           )}
         </div>
-        {typeof price === "number" && (
-          <p className="text-xs font-medium mt-0.5" style={{ color: '#000000' }}>Per month</p>
+        {typeof price === "number" && tier.priceLabel && (
+          <p className="text-xs font-medium mt-0.5" style={{ color: '#000000' }}>{tier.priceLabel}</p>
         )}
       </div>
 

@@ -88,7 +88,7 @@ export default function PreferencesPage() {
         .eq("id", user.id)
         .maybeSingle()
 
-      if (hasFreeReportLimitReached(profile)) {
+      if (hasFreeReportLimitReached(profile, user.created_at)) {
         posthog.capture("upgrade_limit_shown", { property_url: value.trim() })
         openUpgradeLimit()
         return

@@ -13,8 +13,7 @@ import {
   type PendingOAuthSignupMetadata,
   clearPendingOAuthSignupMetadata,
 } from "@/lib/oauth-signup-metadata"
-import { FREE_PROPERTY_LIMIT } from "@/lib/report-generation"
-import { getCalendlyBookingUrl, openCalendlyBooking, preloadCalendlyWidget } from "@/lib/calendly"
+import { getFreePropertyLimitForUser } from "@/lib/report-generation"
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -82,10 +81,27 @@ export function LoginPopupProvider({ children }: { children: React.ReactNode }) 
 
 function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter()
-  const calendlyUrl = getCalendlyBookingUrl()
+  const [limitMessage, setLimitMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    if (open) preloadCalendlyWidget()
+    if (!open) return
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!url || !key) {
+      setLimitMessage("Upgrade to Pro to keep analysing properties.")
+      return
+    }
+    const supabase = createBrowserClient(url, key)
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      const limit = getFreePropertyLimitForUser(user?.created_at)
+      if (limit === 0) {
+        setLimitMessage("Upgrade to Pro to analyse properties.")
+      } else {
+        setLimitMessage(
+          `You've used your ${limit} free property ${limit === 1 ? "analysis" : "analyses"}.`
+        )
+      }
+    })
   }, [open])
 
   if (!open) return null
@@ -95,36 +111,22 @@ function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => vo
       <Card className="relative z-10 w-full max-w-xl px-8 py-10 shadow-lg">
         <CardHeader className="p-0 pb-7">
           <CardTitle className="text-2xl">
-            You&apos;ve analysed {FREE_PROPERTY_LIMIT}{" "}
-            {FREE_PROPERTY_LIMIT === 1 ? "property" : "properties"} — fancy a chat?
+            {limitMessage ?? "Upgrade to Pro to continue"}
           </CardTitle>
           <CardDescription className="pt-3 text-base leading-7">
-            We&apos;d love 15 minutes of your time. Tell us what you think of HomeLens and
-            we&apos;ll give you a free month of Pro — no strings attached. Or upgrade now for
-            less than a coffee a month.
+            Upgrade to Pro to keep analysing properties, save listings, and download reports.
           </CardDescription>
         </CardHeader>
         <CardFooter className="flex flex-col gap-4 p-0 pt-7">
           <Button
             className="h-12 w-full text-base bg-[#0A369D] hover:bg-[#082e83]"
             onClick={() => {
-              posthog.capture("limit_call_booking_clicked", { source: "limit_popup" })
-              openCalendlyBooking(calendlyUrl)
-              onClose()
-            }}
-          >
-            Book a free 15-minute call
-          </Button>
-          <Button
-            variant="outline"
-            className="h-12 w-full text-base border-[#0A369D] text-[#0A369D] hover:bg-[#0A369D]/10"
-            onClick={() => {
               posthog.capture("upgrade_to_pro_clicked", { source: "limit_popup" })
               onClose()
               router.push("/pricing")
             }}
           >
-            Upgrade for £5/month
+            Upgrade to Pro
           </Button>
           <Button variant="ghost" onClick={onClose} className="h-12 w-full text-base text-muted-foreground">
             Maybe later

@@ -41,12 +41,20 @@ export async function GET(request: NextRequest) {
   const admin = createClient(supabaseUrl, serviceRoleKey)
   const { data: profile } = await admin
     .from("profiles")
-    .select("stripe_customer_id")
+    .select("stripe_customer_id, stripe_status, stripe_subscription_id")
     .eq("id", user.id)
     .maybeSingle()
 
+  if (profile?.stripe_status === "lifetime") {
+    return NextResponse.redirect(new URL("/account?error=lifetime_plan", request.url))
+  }
+
   const customerId = profile?.stripe_customer_id
-  if (!customerId || typeof customerId !== "string") {
+  if (
+    !customerId ||
+    typeof customerId !== "string" ||
+    !profile?.stripe_subscription_id
+  ) {
     return NextResponse.redirect(new URL("/account?error=no_subscription", request.url))
   }
 

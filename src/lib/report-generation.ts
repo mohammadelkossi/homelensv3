@@ -1,46 +1,69 @@
 export const PENDING_REPORT_STORAGE_KEY = "homelens_pending_report"
 
-export const FREE_PROPERTY_LIMIT = 1
+/** Grandfathered accounts (created before cutoff) may use this many free reports. */
+export const GRANDFATHERED_FREE_PROPERTY_LIMIT = 1
+
+/** Stripe profile status for £21 lifetime (one-time) purchasers. */
+export const STRIPE_PRO_STATUS_LIFETIME = "lifetime"
 
 export type UserProfileLimit = {
-  plan: string | null
-  property_reports_used: number | null
-  stripe_subscription_id: string | null
-  stripe_status: string | null
+  plan?: string | null
+  property_reports_used?: number | null
+  stripe_subscription_id?: string | null
+  stripe_status?: string | null
+}
+
+export function getGrandfatherCutoff(): Date | null {
+  const iso =
+    process.env.PRICING_GRANDFATHER_CUTOFF_ISO ??
+    process.env.NEXT_PUBLIC_PRICING_GRANDFATHER_CUTOFF_ISO
+  if (!iso) return null
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** Free report allowance: 1 for pre-cutoff accounts, 0 for new signups. */
+export function getFreePropertyLimitForUser(
+  userCreatedAt: string | null | undefined
+): number {
+  if (!userCreatedAt) return 0
+  const cutoff = getGrandfatherCutoff()
+  if (!cutoff) return 0
+  return new Date(userCreatedAt) < cutoff ? GRANDFATHERED_FREE_PROPERTY_LIMIT : 0
 }
 
 export function isProProfile(profile: UserProfileLimit | null | undefined): boolean {
   if (!profile) return false
   return (
     profile.plan === "pro" ||
+    profile.stripe_status === STRIPE_PRO_STATUS_LIFETIME ||
     (!!profile.stripe_subscription_id &&
       ["active", "trialing"].includes(profile.stripe_status ?? ""))
   )
 }
 
 export function hasFreeReportLimitReached(
-  profile: UserProfileLimit | null | undefined
+  profile: UserProfileLimit | null | undefined,
+  userCreatedAt?: string | null
 ): boolean {
   if (isProProfile(profile)) return false
-  return (profile?.property_reports_used ?? 0) >= FREE_PROPERTY_LIMIT
+  const limit = getFreePropertyLimitForUser(userCreatedAt)
+  if (limit === 0) return true
+  return (profile?.property_reports_used ?? 0) >= limit
 }
 
-export function freeAnalysesFeatureLabel(count = FREE_PROPERTY_LIMIT): string {
-  return count === 1
-    ? "1 full property analysis"
-    : `${count} full property analyses`
+export function freeAnalysesLimitReachedMessage(
+  userCreatedAt?: string | null
+): string {
+  const limit = getFreePropertyLimitForUser(userCreatedAt)
+  if (limit === 0) {
+    return "Upgrade to Pro to analyse properties."
+  }
+  return `You've used your ${limit} free property ${limit === 1 ? "analysis" : "analyses"}. Upgrade to Pro to continue.`
 }
 
-export function freeAnalysesPricingFaqAnswer(monthlyPrice = 5): string {
-  const intro =
-    FREE_PROPERTY_LIMIT === 1
-      ? "1 property is analysed free of charge"
-      : `${FREE_PROPERTY_LIMIT} properties are analysed free of charge`
-  return `${intro}, beyond this the cost is £${monthlyPrice}/month - this is to cover the heavy processing costs associated with producing reports`
-}
-
-export function freeAnalysesLimitReachedMessage(): string {
-  return `You've used your ${FREE_PROPERTY_LIMIT} free property ${FREE_PROPERTY_LIMIT === 1 ? "analysis" : "analyses"}. Upgrade to Pro to continue.`
+export function pricingFaqAnswer(): string {
+  return "Pro is £8/month or £21 for lifetime access. If you signed up before our latest pricing change and haven't used your free analysis yet, you can still run one report before upgrading."
 }
 
 export type ReportPreferences = {
