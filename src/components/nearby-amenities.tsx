@@ -11,6 +11,7 @@ interface NearbyAmenitiesProps {
     name: string
     distance: number
   }[]
+  loading?: boolean
 }
 
 const categoryConfig: Record<string, { icon: typeof GraduationCap; color: string }> = {
@@ -23,7 +24,7 @@ const categoryConfig: Record<string, { icon: typeof GraduationCap; color: string
   Hospital: { icon: Heart, color: "bg-red-500/10 text-red-600" },
 }
 
-export function NearbyAmenities({ amenities }: NearbyAmenitiesProps) {
+export function NearbyAmenities({ amenities, loading = false }: NearbyAmenitiesProps) {
   const categories = [...new Set(amenities.map((a) => a.category))]
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
 
@@ -64,6 +65,15 @@ export function NearbyAmenities({ amenities }: NearbyAmenitiesProps) {
         </div>
       </CardHeader>
       <CardContent>
+        {loading ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            Loading nearby amenities...
+          </p>
+        ) : amenities.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            No nearby amenities found for this property. Try generating a new report.
+          </p>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredAmenities.map((amenity, index) => {
             const config = categoryConfig[amenity.category] || {
@@ -93,6 +103,7 @@ export function NearbyAmenities({ amenities }: NearbyAmenitiesProps) {
             )
           })}
         </div>
+        )}
       </CardContent>
     </Card>
   )

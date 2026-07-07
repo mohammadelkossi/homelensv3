@@ -8,34 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { X } from "lucide-react"
 import posthog from "posthog-js"
-import {
-  OAUTH_SIGNUP_METADATA_STORAGE_KEY,
-  type PendingOAuthSignupMetadata,
-  clearPendingOAuthSignupMetadata,
-} from "@/lib/oauth-signup-metadata"
-
-function GoogleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-        fill="#4285F4"
-      />
-      <path
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-        fill="#34A853"
-      />
-      <path
-        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-        fill="#FBBC05"
-      />
-      <path
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-        fill="#EA4335"
-      />
-    </svg>
-  )
-}
 
 type LoginPopupContextType = {
   open: boolean
@@ -131,9 +103,6 @@ function LoginPopup({
       setOpenWithMode(null)
     }
   }, [open, openWithMode, setOpenWithMode])
-  const [googleLoading, setGoogleLoading] = useState(false)
-  const [googleError, setGoogleError] = useState<string | null>(null)
-  const [showGoogleSignupNameBanner, setShowGoogleSignupNameBanner] = useState(false)
   const [signupName, setSignupName] = useState("")
   const [signupEmail, setSignupEmail] = useState("")
   const [signupPassword, setSignupPassword] = useState("")
@@ -152,9 +121,6 @@ function LoginPopup({
   const [forgotSuccess, setForgotSuccess] = useState(false)
 
   function closePopup() {
-    clearPendingOAuthSignupMetadata()
-    setGoogleError(null)
-    setShowGoogleSignupNameBanner(false)
     setOpen(false)
     setMode("login")
     setSignupError(null)
@@ -186,61 +152,10 @@ function LoginPopup({
     }
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      clearPendingOAuthSignupMetadata()
       posthog.identify(user.id, { email: user.email, name: user.user_metadata?.full_name })
       posthog.capture('user_logged_in', { method: 'email' })
     }
     closePopup()
-  }
-
-  async function handleGoogleSignIn() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!url || !key) {
-      setGoogleError("Auth is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.")
-      return
-    }
-    if (mode === "signup" && !signupName.trim()) {
-      setShowGoogleSignupNameBanner(true)
-      return
-    }
-    setShowGoogleSignupNameBanner(false)
-    setGoogleError(null)
-    setGoogleLoading(true)
-    try {
-      if (typeof window !== "undefined") {
-        if (mode === "signup") {
-          const meta: PendingOAuthSignupMetadata = {
-            full_name: signupName.trim(),
-            marketing_opt_in: marketingOptIn,
-          }
-          const json = JSON.stringify(meta)
-          sessionStorage.setItem(OAUTH_SIGNUP_METADATA_STORAGE_KEY, json)
-          localStorage.setItem(OAUTH_SIGNUP_METADATA_STORAGE_KEY, json)
-        } else {
-          clearPendingOAuthSignupMetadata()
-        }
-      }
-      const supabase = createBrowserClient(url, key)
-      const redirectTo = `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback`
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo },
-      })
-      if (error) {
-        clearPendingOAuthSignupMetadata()
-        setGoogleError(error.message)
-        return
-      }
-      if (data?.url) {
-        window.location.href = data.url
-        return
-      }
-      clearPendingOAuthSignupMetadata()
-      setGoogleError("Could not get sign-in URL")
-    } finally {
-      setGoogleLoading(false)
-    }
   }
 
   async function handleSignup(e: React.FormEvent) {
@@ -338,11 +253,6 @@ function LoginPopup({
                   ? "Sign in to your HomeLens account"
                   : "Sign up for a HomeLens account"}
             </CardDescription>
-            {mode === "signup" && showGoogleSignupNameBanner && (
-              <p className="mt-2 text-sm font-medium text-red-600" role="alert">
-                Please enter your name.
-              </p>
-            )}
           </div>
           <button
             type="button"
@@ -396,27 +306,6 @@ function LoginPopup({
               {loginError && (
                 <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{loginError}</p>
               )}
-              {googleError && (
-                <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{googleError}</p>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={googleLoading}
-                className="w-full h-11 border-gray-300 hover:bg-gray-50 flex items-center justify-center gap-2"
-                onClick={handleGoogleSignIn}
-              >
-                <GoogleIcon className="h-5 w-5" />
-                {googleLoading ? "Redirecting…" : "Sign in with Google"}
-              </Button>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-gray-500">or continue with email</span>
-                </div>
-              </div>
               <div className="space-y-2">
                 <label htmlFor="login-email" className="text-sm font-medium text-gray-700">Email</label>
                 <Input
@@ -471,9 +360,6 @@ function LoginPopup({
               {signupError && (
                 <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{signupError}</p>
               )}
-              {googleError && (
-                <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{googleError}</p>
-              )}
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">
                   <label htmlFor="signup-name" className="text-sm font-medium text-gray-700">Name <span className="text-red-600" aria-hidden="true">*</span></label>
@@ -483,11 +369,7 @@ function LoginPopup({
                     placeholder="Your name"
                     className="w-full"
                     value={signupName}
-                    onChange={(e) => {
-                      setSignupName(e.target.value)
-                      setGoogleError(null)
-                      setShowGoogleSignupNameBanner(false)
-                    }}
+                    onChange={(e) => setSignupName(e.target.value)}
                     required
                   />
                 </div>
@@ -529,24 +411,6 @@ function LoginPopup({
                     minLength={6}
                   />
                 </div>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white px-2 text-gray-500">or sign up with Google</span>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={googleLoading}
-                  className="w-full h-11 border-gray-300 hover:bg-gray-50 flex items-center justify-center gap-2"
-                  onClick={handleGoogleSignIn}
-                >
-                  <GoogleIcon className="h-5 w-5" />
-                  {googleLoading ? "Redirecting…" : "Sign up with Google"}
-                </Button>
                 <label htmlFor="signup-marketing-opt-in" className="flex items-start gap-3 text-sm text-gray-700">
                   <input
                     id="signup-marketing-opt-in"
@@ -602,11 +466,8 @@ function LoginPopup({
                 type="button"
                 className="text-[#0A369D] font-medium hover:underline"
                 onClick={() => {
-                  clearPendingOAuthSignupMetadata()
                   setMode("login")
                   setSignupError(null)
-                  setGoogleError(null)
-                  setShowGoogleSignupNameBanner(false)
                 }}
               >
                 Log in

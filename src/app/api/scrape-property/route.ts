@@ -5,10 +5,16 @@ import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import {
+  calculateDistanceKm,
+  nearbyPlacesFromApify,
+  type ApifyAmenityFallback,
+} from '@/lib/nearby-amenities';
+import {
   hasFreeReportLimitReached,
   reportLimitReachedMessage,
   isProProfile,
 } from '@/lib/report-generation';
+import { getPropertyRecord, searchAddresses } from '@/lib/homedata';
 
 // ─── Helpers (unchanged) ────────────────────────────────────────────────────
 
@@ -137,21 +143,6 @@ async function getArea(
 
 // ─── Geo / distance helpers (unchanged) ─────────────────────────────────────
 
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function toRadians(degrees: number): number {
-  return degrees * (Math.PI / 180);
-}
-
 async function getPostcodeFromCoordinates(latitude: number, longitude: number): Promise<{ fullPostcode: string | null; outcode: string | null }> {
   if (!latitude || !longitude) {
     return { fullPostcode: null, outcode: null };
@@ -174,205 +165,21 @@ async function getPostcodeFromCoordinates(latitude: number, longitude: number): 
   }
 }
 
-type NearbyPlace = { name: string; distance: number };
+const HOMEDATA_FLOOR_AREA_LOOKUP_LIMIT = 25;
+const HOMEDATA_LOOKUP_CONCURRENCY = 5;
 
-type AmenityCategory =
-  | 'school'
-  | 'station'
-  | 'park'
-  | 'supermarket'
-  | 'church'
-  | 'mosque'
-  | 'synagogue'
-  | 'hindu_temple'
-  | 'gym'
-  | 'hospital';
-
-type OverpassElement = {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-};
-
-const OVERPASS_AMENITY_RADIUS_M = 5000;
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-
-function getOverpassElementCoords(element: OverpassElement): { lat: number; lon: number } | null {
-  if (element.lat != null && element.lon != null) return { lat: element.lat, lon: element.lon };
-  if (element.center) return { lat: element.center.lat, lon: element.center.lon };
-  return null;
-}
-
-function categorizeOverpassAmenity(tags: Record<string, string>): AmenityCategory | null {
-  const amenity = tags.amenity;
-  const shop = tags.shop;
-  const leisure = tags.leisure;
-  const railway = tags.railway;
-  const religion = (tags.religion || '').toLowerCase();
-  const landuse = tags.landuse;
-  const publicTransport = tags.public_transport;
-
-  if (amenity === 'hospital') return 'hospital';
-  if (amenity === 'school' || amenity === 'college' || tags.building === 'school') return 'school';
-  if (leisure === 'fitness_centre' || leisure === 'sports_centre' || amenity === 'gym') return 'gym';
-  if (leisure === 'park' || leisure === 'garden' || landuse === 'recreation_ground') return 'park';
-  if (shop === 'supermarket') return 'supermarket';
-  if (
-    railway === 'station' ||
-    railway === 'halt' ||
-    amenity === 'bus_station' ||
-    publicTransport === 'station'
-  ) {
-    return 'station';
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let index = 0; index < items.length; index += limit) {
+    const batch = items.slice(index, index + limit);
+    const batchResults = await Promise.all(batch.map(mapper));
+    results.push(...batchResults);
   }
-  if (amenity === 'place_of_worship') {
-    if (religion === 'muslim') return 'mosque';
-    if (religion === 'jewish') return 'synagogue';
-    if (religion === 'hindu') return 'hindu_temple';
-    return 'church';
-  }
-  if (tags.building === 'church') return 'church';
-  return null;
-}
-
-function buildOverpassAmenityQuery(latitude: number, longitude: number, radiusMeters: number): string {
-  const around = `(around:${radiusMeters},${latitude},${longitude})`;
-  const selectors = [
-    `node["amenity"="school"]${around}`,
-    `way["amenity"="school"]${around}`,
-    `node["amenity"="college"]${around}`,
-    `way["amenity"="college"]${around}`,
-    `node["railway"="station"]${around}`,
-    `way["railway"="station"]${around}`,
-    `node["railway"="halt"]${around}`,
-    `way["railway"="halt"]${around}`,
-    `node["public_transport"="station"]${around}`,
-    `way["public_transport"="station"]${around}`,
-    `node["amenity"="bus_station"]${around}`,
-    `way["amenity"="bus_station"]${around}`,
-    `node["leisure"="park"]${around}`,
-    `way["leisure"="park"]${around}`,
-    `node["leisure"="garden"]${around}`,
-    `way["leisure"="garden"]${around}`,
-    `node["landuse"="recreation_ground"]${around}`,
-    `way["landuse"="recreation_ground"]${around}`,
-    `node["shop"="supermarket"]${around}`,
-    `way["shop"="supermarket"]${around}`,
-    `node["amenity"="place_of_worship"]${around}`,
-    `way["amenity"="place_of_worship"]${around}`,
-    `node["building"="church"]${around}`,
-    `way["building"="church"]${around}`,
-    `node["leisure"="fitness_centre"]${around}`,
-    `way["leisure"="fitness_centre"]${around}`,
-    `node["leisure"="sports_centre"]${around}`,
-    `way["leisure"="sports_centre"]${around}`,
-    `node["amenity"="gym"]${around}`,
-    `way["amenity"="gym"]${around}`,
-    `node["amenity"="hospital"]${around}`,
-    `way["amenity"="hospital"]${around}`,
-  ];
-  return `[out:json][timeout:25];(${selectors.join(';')};);out center tags;`;
-}
-
-async function fetchOverpassAmenities(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number = OVERPASS_AMENITY_RADIUS_M
-): Promise<OverpassElement[]> {
-  const query = buildOverpassAmenityQuery(latitude, longitude, radiusMeters);
-  const response = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'HomeLens/1.0 (property report amenities)',
-    },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  if (!response.ok) {
-    console.error('Overpass API error:', response.status, await response.text().catch(() => ''));
-    return [];
-  }
-  const data = await response.json();
-  return Array.isArray(data.elements) ? data.elements : [];
-}
-
-function takeNearestPlaces(
-  places: NearbyPlace[],
-  maxResults: number
-): NearbyPlace[] {
-  return [...places].sort((a, b) => a.distance - b.distance).slice(0, maxResults);
-}
-
-async function getAllNearbyPlaces(latitude: number, longitude: number) {
-  const empty = {
-    schools: [] as NearbyPlace[],
-    stations: [] as NearbyPlace[],
-    parks: [] as NearbyPlace[],
-    supermarkets: [] as NearbyPlace[],
-    placesOfWorship: [] as NearbyPlace[],
-    gyms: [] as NearbyPlace[],
-    hospitals: [] as NearbyPlace[],
-  };
-
-  if (!latitude || !longitude) return empty;
-
-  try {
-    const elements = await fetchOverpassAmenities(latitude, longitude);
-    const buckets: Record<AmenityCategory, NearbyPlace[]> = {
-      school: [],
-      station: [],
-      park: [],
-      supermarket: [],
-      church: [],
-      mosque: [],
-      synagogue: [],
-      hindu_temple: [],
-      gym: [],
-      hospital: [],
-    };
-    const seen = new Set<string>();
-
-    for (const element of elements) {
-      const tags = element.tags;
-      if (!tags?.name) continue;
-
-      const category = categorizeOverpassAmenity(tags);
-      if (!category) continue;
-
-      const coords = getOverpassElementCoords(element);
-      if (!coords) continue;
-
-      const dedupeKey = `${category}:${element.type}/${element.id}`;
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
-
-      buckets[category].push({
-        name: tags.name,
-        distance: calculateDistance(latitude, longitude, coords.lat, coords.lon),
-      });
-    }
-
-    const placesOfWorship = takeNearestPlaces(
-      [...buckets.church, ...buckets.mosque, ...buckets.synagogue, ...buckets.hindu_temple],
-      3
-    );
-
-    return {
-      schools: takeNearestPlaces(buckets.school, 3),
-      stations: takeNearestPlaces(buckets.station, 3),
-      parks: takeNearestPlaces(buckets.park, 3),
-      supermarkets: takeNearestPlaces(buckets.supermarket, 3),
-      placesOfWorship,
-      gyms: takeNearestPlaces(buckets.gym, 3),
-      hospitals: takeNearestPlaces(buckets.hospital, 3),
-    };
-  } catch (error) {
-    console.error('Error fetching nearby places from Overpass:', error);
-    return empty;
-  }
+  return results;
 }
 
 // ─── Address / price helpers (unchanged) ────────────────────────────────────
@@ -545,20 +352,88 @@ async function fetchEpcRowsForPostcode(postcode: string): Promise<any[]> {
   if (!postcode || !process.env.EPC_API_EMAIL || !process.env.EPC_API_KEY) return [];
   try {
     const response = await fetch(
-      `https://epc.opendatacommunities.org/api/v1/domestic/search?postcode=${encodeURIComponent(postcode)}`,
+      `https://epc.opendatacommunities.org/api/v1/domestic/search?postcode=${encodeURIComponent(postcode)}&size=500`,
       {
+        redirect: 'manual',
+        cache: 'no-store',
         headers: {
           Accept: 'application/json',
           Authorization: `Basic ${Buffer.from(`${process.env.EPC_API_EMAIL}:${process.env.EPC_API_KEY}`).toString('base64')}`,
         },
       }
     );
-    if (!response.ok) return [];
+    if (response.status === 301 || response.status === 302) return [];
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!response.ok || !contentType.includes('json')) return [];
     const data = await response.json();
     return Array.isArray(data.rows) ? data.rows : [];
   } catch (error) {
     console.error('Error fetching EPC data:', error);
     return [];
+  }
+}
+
+type LandRegistrySale = {
+  paon?: string | null;
+  saon?: string | null;
+  street?: string | null;
+  postcode?: string | null;
+  price?: number | null;
+};
+
+function saleLookupKey(sale: LandRegistrySale): string {
+  return [sale.postcode, sale.paon, sale.saon, sale.street]
+    .map((part) => (part ?? '').trim().toLowerCase())
+    .join('|');
+}
+
+function floorAreaFromEpcRow(row: Record<string, unknown>): number | null {
+  const floorArea = row['total-floor-area'] ? Number(row['total-floor-area']) : null;
+  if (!floorArea || isNaN(floorArea) || floorArea <= 0) return null;
+  return floorArea;
+}
+
+function matchEpcRowForSale(
+  sale: LandRegistrySale,
+  epcRows: Record<string, unknown>[]
+): Record<string, unknown> | null {
+  const targetAddress = normalizeAddress(`${sale.paon ?? ''} ${sale.saon ?? ''} ${sale.street ?? ''}`);
+  if (!targetAddress) return null;
+
+  return (
+    epcRows.find((row) => {
+      const candidates = [
+        normalizeAddress(row.address1 as string | undefined),
+        normalizeAddress(row.address as string | undefined),
+        normalizeAddress(row['address-line-1'] as string | undefined),
+      ].filter(Boolean) as string[];
+      return candidates.some((candidate) => candidate === targetAddress);
+    }) ?? null
+  );
+}
+
+async function getFloorAreaForSaleFromHomedata(sale: LandRegistrySale): Promise<number | null> {
+  if (!process.env.HOMEDATA_API_KEY) return null;
+
+  const query = [sale.paon, sale.saon, sale.street, sale.postcode].filter(Boolean).join(' ').trim();
+  if (!query) return null;
+
+  try {
+    const suggestions = await searchAddresses(query);
+    const uprn = suggestions[0]?.uprn;
+    if (!uprn) return null;
+
+    const property = await getPropertyRecord(String(uprn));
+    const area =
+      property.epc_floor_area ??
+      property.predicted_floor_area ??
+      property.internal_area_sqm;
+    const floorArea = area != null ? Number(area) : null;
+    if (!floorArea || !Number.isFinite(floorArea) || floorArea <= 0) return null;
+    return floorArea;
+  } catch (error) {
+    console.error('Homedata floor area lookup failed:', error);
+    return null;
   }
 }
 
@@ -596,32 +471,50 @@ async function getAveragePricePerSqmForPropertyTypeAndOutcode(
     const epcResults = await Promise.all(uniquePostcodes.map(pc => fetchEpcRowsForPostcode(pc)));
     const epcCache = new Map<string, any[]>(uniquePostcodes.map((pc, i) => [pc, epcResults[i]]));
 
-    let sum = 0, count = 0, weightedNumerator = 0, weightedDenominator = 0;
+    const floorAreaBySale = new Map<string, number>();
+    const homedataCandidates: LandRegistrySale[] = [];
 
     for (const sale of sales) {
-      const salePostcode = sale.postcode?.toUpperCase?.() ?? null;
-      if (!salePostcode) continue;
-      const epcRows = epcCache.get(salePostcode);
-      if (!epcRows?.length) continue;
-
-      const targetAddress = normalizeAddress(`${sale.paon ?? ''} ${sale.saon ?? ''} ${sale.street ?? ''}`);
-      if (!targetAddress) continue;
-
-      const matchingRow = epcRows.find(row => {
-        const candidates = [
-          normalizeAddress(row.address1),
-          normalizeAddress(row.address),
-          normalizeAddress(row['address-line-1']),
-        ].filter(Boolean) as string[];
-        return candidates.some(c => c === targetAddress);
-      });
-      if (!matchingRow) continue;
-
-      const floorArea = matchingRow['total-floor-area'] ? Number(matchingRow['total-floor-area']) : null;
-      if (!floorArea || isNaN(floorArea) || floorArea <= 0) continue;
-
       const price = Number(sale.price);
       if (!Number.isFinite(price) || price <= 0) continue;
+
+      const salePostcode = sale.postcode?.toUpperCase?.() ?? null;
+      if (!salePostcode) continue;
+
+      const epcRows = epcCache.get(salePostcode);
+      const matchingRow = epcRows?.length ? matchEpcRowForSale(sale, epcRows) : null;
+      const epcFloorArea = matchingRow ? floorAreaFromEpcRow(matchingRow) : null;
+
+      if (epcFloorArea !== null) {
+        floorAreaBySale.set(saleLookupKey(sale), epcFloorArea);
+      } else {
+        homedataCandidates.push(sale);
+      }
+    }
+
+    const homedataTargets = homedataCandidates.slice(0, HOMEDATA_FLOOR_AREA_LOOKUP_LIMIT);
+    const homedataResults = await mapWithConcurrency(homedataTargets, HOMEDATA_LOOKUP_CONCURRENCY, async (sale) => ({
+      key: saleLookupKey(sale),
+      floorArea: await getFloorAreaForSaleFromHomedata(sale),
+    }));
+
+    for (const result of homedataResults) {
+      if (result.floorArea !== null) {
+        floorAreaBySale.set(result.key, result.floorArea);
+      }
+    }
+
+    let sum = 0;
+    let count = 0;
+    let weightedNumerator = 0;
+    let weightedDenominator = 0;
+
+    for (const sale of sales) {
+      const price = Number(sale.price);
+      if (!Number.isFinite(price) || price <= 0) continue;
+
+      const floorArea = floorAreaBySale.get(saleLookupKey(sale));
+      if (floorArea === undefined) continue;
 
       const pricePerSqm = price / floorArea;
       sum += pricePerSqm;
@@ -770,6 +663,7 @@ export async function POST(request: NextRequest) {
       propertyUrls: [{ url }],
       fullPropertyDetails: true,
       includePriceHistory: true,
+      includeNearestSchools: true,
       monitoringMode: false,
       maxProperties: 1,
     });
@@ -804,13 +698,16 @@ export async function POST(request: NextRequest) {
     //   Batch 1 — things that don't depend on each other at all
     //   Batch 2 — things that need the postcode from batch 1
 
+    const apifyAmenities: ApifyAmenityFallback = {
+      nearestStations: propertyData.nearestStations,
+      nearestSchools: propertyData.nearestSchools,
+    };
+
     const [housePostcode, nearbyPlaces, postcodeCoords, area] = await Promise.all([
       propertyLat && propertyLon
         ? getPostcodeFromCoordinates(propertyLat, propertyLon)
         : Promise.resolve({ fullPostcode: null, outcode: null }),
-      propertyLat && propertyLon
-        ? getAllNearbyPlaces(propertyLat, propertyLon)
-        : Promise.resolve({ schools: [], stations: [], parks: [], supermarkets: [], placesOfWorship: [], gyms: [], hospitals: [] }),
+      Promise.resolve(nearbyPlacesFromApify(apifyAmenities)),
       getPostcodeCoordinates(postcode || ''),
       getArea(propertyData, propertyData.floorplans, propertyData.description, openai),
     ]);
@@ -832,7 +729,7 @@ export async function POST(request: NextRequest) {
 
     const distance =
       propertyLat && propertyLon && postcodeCoords.latitude !== null && postcodeCoords.longitude !== null
-        ? calculateDistance(propertyLat, propertyLon, postcodeCoords.latitude, postcodeCoords.longitude)
+        ? calculateDistanceKm(propertyLat, propertyLon, postcodeCoords.latitude, postcodeCoords.longitude)
         : null;
 
     const result = {

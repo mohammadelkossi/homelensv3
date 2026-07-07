@@ -7,7 +7,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ChartLineLabel } from "@/components/ui/chart-line-label"
 import { ChartBarPreferences } from "@/components/ui/chart-bar-preferences"
-import { NearbyAmenities } from "@/components/nearby-amenities"
+import { NearbyAmenitiesSection } from "@/components/nearby-amenities-section"
 import { ScoreGauge } from "@/components/ui/score-gauge"
 import { useState, useEffect, Suspense } from "react"
 function ResultsPageContent() {
@@ -464,15 +464,12 @@ function ResultsPageContent() {
     
     const amenities: Array<{ category: string; name: string; distance: number }> = []
     
-    // Convert miles to km (1 mile = 1.60934 km)
-    const milesToKm = (miles: number) => miles * 1.60934
-    
     if (nearbyPlaces.schools) {
       nearbyPlaces.schools.forEach(school => {
         amenities.push({
           category: 'School',
           name: school.name,
-          distance: milesToKm(school.distance),
+          distance: school.distance,
         })
       })
     }
@@ -482,7 +479,7 @@ function ResultsPageContent() {
         amenities.push({
           category: 'Station',
           name: station.name,
-          distance: milesToKm(station.distance),
+          distance: station.distance,
         })
       })
     }
@@ -492,7 +489,7 @@ function ResultsPageContent() {
         amenities.push({
           category: 'Park',
           name: park.name,
-          distance: milesToKm(park.distance),
+          distance: park.distance,
         })
       })
     }
@@ -502,7 +499,7 @@ function ResultsPageContent() {
         amenities.push({
           category: 'Supermarket',
           name: supermarket.name,
-          distance: milesToKm(supermarket.distance),
+          distance: supermarket.distance,
         })
       })
     }
@@ -512,7 +509,7 @@ function ResultsPageContent() {
         amenities.push({
           category: 'Place of Worship',
           name: place.name,
-          distance: milesToKm(place.distance),
+          distance: place.distance,
         })
       })
     }
@@ -522,7 +519,7 @@ function ResultsPageContent() {
         amenities.push({
           category: 'Gym',
           name: gym.name,
-          distance: milesToKm(gym.distance),
+          distance: gym.distance,
         })
       })
     }
@@ -532,7 +529,7 @@ function ResultsPageContent() {
         amenities.push({
           category: 'Hospital',
           name: hospital.name,
-          distance: milesToKm(hospital.distance),
+          distance: hospital.distance,
         })
       })
     }
@@ -2112,7 +2109,11 @@ function ResultsPageContent() {
             </div>
           </div>
           <div className="rounded-lg px-4 sm:px-6 py-4 mb-6 sm:mb-8 w-full max-w-full min-w-0 lg:w-[calc(5*17.97%+4*1rem)] lg:ml-[3%] mt-6 sm:mt-8 pb-6 sm:pb-8" style={{ backgroundColor: '#CFDEE7', borderRadius: '0.5rem', minHeight: '653.184px', display: 'flex', flexDirection: 'column' }}>
-            <NearbyAmenities amenities={transformNearbyPlaces()} />
+            <NearbyAmenitiesSection
+              nearbyPlacesParam={searchParams.get("nearbyPlaces")}
+              latitude={propertyData.latitude}
+              longitude={propertyData.longitude}
+            />
           </div>
           
           {/* Debug Tables - Only show when ?debug=true */}

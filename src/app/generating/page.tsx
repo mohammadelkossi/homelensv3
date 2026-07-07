@@ -15,6 +15,7 @@ import {
   readPendingReportPayload,
   type PendingReportPayload,
 } from "@/lib/report-generation"
+import { storeNearbyPlaces } from "@/lib/nearby-amenities"
 
 export default function GeneratingPage() {
   const router = useRouter()
@@ -72,6 +73,9 @@ export default function GeneratingPage() {
       }
 
       const data = await response.json()
+      if (data.nearbyPlaces) {
+        storeNearbyPlaces(data.nearbyPlaces)
+      }
       posthog.capture("report_generated", { property_url: payload.url })
       clearPendingReportPayload()
       setComplete(true)
