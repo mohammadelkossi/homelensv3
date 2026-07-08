@@ -53,10 +53,44 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <section style={{ backgroundColor: '#CFDEE7' }}>
+        <div className="container mx-auto px-6 py-16 md:py-20">
+          <div className="flex flex-col md:flex-row items-center gap-10 md:gap-14" style={{ paddingLeft: '5%' }}>
+            <div className="w-full md:w-[48%] overflow-hidden rounded-2xl bg-black shadow-[0_24px_60px_rgba(10,54,157,0.18)]">
+              <video
+                className="block w-full h-auto"
+                src="/Homelens.mp4"
+                controls
+                playsInline
+                preload="metadata"
+              >
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            <div className="w-full md:flex-1 flex items-center justify-center md:justify-start">
+              <div className="text-center md:text-left">
+                <h2
+                  className="font-bold leading-tight"
+                  style={{ color: '#000000', fontSize: 'clamp(2rem, 4vw, 3.5rem)', fontFamily: "'Britti Sans', sans-serif" }}
+                >
+                  Buying Blind is Expensive
+                </h2>
+                <p
+                  className="mt-4 max-w-md"
+                  style={{ color: '#000000', fontSize: 'clamp(1rem, 1.6vw, 1.35rem)', fontFamily: "'Britti Sans', sans-serif", lineHeight: 1.4 }}
+                >
+                  Here&apos;s how HomeLens shows you what Rightmove doesn&apos;t
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
       
-      <section style={{ backgroundColor: '#0A369D', marginTop: '-210px' }}>
-        <div className="container mx-auto px-6" style={{ paddingTop: '21.168rem', paddingBottom: '5rem', minHeight: '70.56vh', height: 'auto' }}>
-          <h2 className="text-3xl md:text-4xl font-bold text-white text-center font-britti" style={{ marginTop: '-5%' }}>How it works</h2>
+      <section style={{ backgroundColor: '#0A369D' }}>
+        <div className="container mx-auto px-6" style={{ paddingTop: '5rem', paddingBottom: '5rem', minHeight: '70.56vh', height: 'auto' }}>
+          <h2 className="text-3xl md:text-4xl font-bold text-white text-center font-britti">How it works</h2>
           <p className="mt-4 text-lg text-white/90 text-center max-w-3xl mx-auto">
             Get started in three simple steps
           </p>
