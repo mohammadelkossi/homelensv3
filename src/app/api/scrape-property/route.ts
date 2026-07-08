@@ -168,6 +168,16 @@ async function getPostcodeFromCoordinates(latitude: number, longitude: number): 
 const HOMEDATA_FLOOR_AREA_LOOKUP_LIMIT = 25;
 const HOMEDATA_LOOKUP_CONCURRENCY = 5;
 
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// Base host for the new "Get energy performance of buildings data" service.
+const EPC_API_BASE_DEFAULT = 'https://api.get-energy-performance-data.communities.gov.uk';
+// The new /api/domestic/search returns a summary WITHOUT floor area. Floor area
+// lives on the full certificate, fetched via /api/certificate?certificate_number=…
+// These bound how many certificate lookups we do per report (latency + rate limits;
+// the service allows 6000 requests / 5 min per IP). Overflow falls back to Homedata.
+const EPC_CERTIFICATE_LOOKUP_LIMIT = 150;
+const EPC_CERTIFICATE_LOOKUP_CONCURRENCY = 8;
+
 async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -348,29 +358,132 @@ LIMIT 5`;
   return null;
 }
 
-async function fetchEpcRowsForPostcode(postcode: string): Promise<any[]> {
-  if (!postcode || !process.env.EPC_API_EMAIL || !process.env.EPC_API_KEY) return [];
-  try {
-    const response = await fetch(
-      `https://epc.opendatacommunities.org/api/v1/domestic/search?postcode=${encodeURIComponent(postcode)}&size=500`,
-      {
-        redirect: 'manual',
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// Migrated from the retired epc.opendatacommunities.org service to the new
+// "Get energy performance of buildings data" service.
+//   • Default endpoint → https://api.get-energy-performance-data.communities.gov.uk/api/domestic/search
+//   • Auth → Bearer token only (old Basic email:apikey scheme removed)
+//   • Query param → page_size (was: size)
+//   • Response shape → { data: [...], pagination: {...} }  (was: { rows: [...] })
+//   • 404 = "no certificates for this postcode" (normal), 429 = rate limited (retry)
+async function fetchEpcRowsForPostcode(postcode: string, retries = 2): Promise<any[]> {
+  if (!postcode) return [];
+
+  const bearerToken = process.env.EPC_API_BEARER_TOKEN?.trim();
+  if (!bearerToken) return [];
+
+  const base = process.env.EPC_API_BASE?.trim() || EPC_API_BASE_DEFAULT;
+  const endpoint =
+    process.env.EPC_API_ENDPOINT?.trim() || `${base}/api/domestic/search`;
+
+  const url = `${endpoint}?postcode=${encodeURIComponent(postcode)}&page_size=500`;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, {
         cache: 'no-store',
         headers: {
           Accept: 'application/json',
-          Authorization: `Basic ${Buffer.from(`${process.env.EPC_API_EMAIL}:${process.env.EPC_API_KEY}`).toString('base64')}`,
+          Authorization: `Bearer ${bearerToken}`,
         },
+      });
+
+      // 429: back off and retry (honour Retry-After header if present)
+      if (response.status === 429) {
+        const wait = Number(response.headers.get('Retry-After')) * 1000 || 1000 * (attempt + 1);
+        await new Promise(r => setTimeout(r, wait));
+        continue;
       }
-    );
-    if (response.status === 301 || response.status === 302) return [];
-    const contentType = response.headers.get('content-type') ?? '';
-    if (!response.ok || !contentType.includes('json')) return [];
-    const data = await response.json();
-    return Array.isArray(data.rows) ? data.rows : [];
-  } catch (error) {
-    console.error('Error fetching EPC data:', error);
-    return [];
+
+      // 404 = no certificates found for this postcode (normal, not an error)
+      if (response.status === 404) return [];
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!response.ok || !contentType.includes('json')) return [];
+
+      const data = await response.json();
+      // New API shape: { data: [...], pagination: {...} }
+      return Array.isArray(data?.data) ? data.data : [];
+    } catch (error) {
+      console.error('Error fetching EPC data:', error);
+      return [];
+    }
   }
+  return [];
+}
+
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// Pull floor area out of a full EPC certificate document. The certificate
+// endpoint's response is free-form in the spec, so we defensively accept every
+// plausible spelling of the floor-area key (camelCase, hyphenated, snake_case,
+// upper). Returns null if none present or the value isn't a positive number.
+function extractFloorArea(doc: Record<string, unknown> | null | undefined): number | null {
+  if (!doc || typeof doc !== 'object') return null;
+  const candidateKeys = [
+    'totalFloorArea',
+    'total-floor-area',
+    'total_floor_area',
+    'TOTAL_FLOOR_AREA',
+    'totalFloorAreaSquareMetres',
+    'floorArea',
+  ];
+  for (const key of candidateKeys) {
+    const raw = (doc as Record<string, unknown>)[key];
+    if (raw != null && raw !== '') {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return null;
+}
+
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// Fetch a single EPC certificate by its certificate number and return its floor
+// area. This is the second half of the two-step lookup: search gives us the
+// certificateNumber, this gives us the floor area the search summary omits.
+// Response shape: { data: { ...full EPC document... } }.
+async function fetchCertificateFloorArea(certificateNumber: string, retries = 2): Promise<number | null> {
+  if (!certificateNumber) return null;
+
+  const bearerToken = process.env.EPC_API_BEARER_TOKEN?.trim();
+  if (!bearerToken) return null;
+
+  const base = process.env.EPC_API_BASE?.trim() || EPC_API_BASE_DEFAULT;
+  const url = `${base}/api/certificate?certificate_number=${encodeURIComponent(certificateNumber)}`;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${bearerToken}`,
+        },
+      });
+
+      // 429: back off and retry (honour Retry-After header if present)
+      if (response.status === 429) {
+        const wait = Number(response.headers.get('Retry-After')) * 1000 || 1000 * (attempt + 1);
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+
+      // 404 = certificate not found (normal, not an error)
+      if (response.status === 404) return null;
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!response.ok || !contentType.includes('json')) return null;
+
+      const json = await response.json();
+      // CertificateResponse: { data: { ...full EPC document... } }
+      const doc = (json?.data ?? json) as Record<string, unknown>;
+      return extractFloorArea(doc);
+    } catch (error) {
+      console.error('Error fetching EPC certificate:', error);
+      return null;
+    }
+  }
+  return null;
 }
 
 type LandRegistrySale = {
@@ -387,12 +500,24 @@ function saleLookupKey(sale: LandRegistrySale): string {
     .join('|');
 }
 
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// NOTE: the new /api/domestic/search endpoint does NOT return floor area in its
+// payload, so this will return null for new-API rows. Kept legacy keys as a
+// fallback in case EPC_API_ENDPOINT is still pointed at the old service. See
+// the message accompanying this file for how to restore floor area if needed.
 function floorAreaFromEpcRow(row: Record<string, unknown>): number | null {
-  const floorArea = row['total-floor-area'] ? Number(row['total-floor-area']) : null;
+  const raw =
+    (row['totalFloorArea'] as unknown) ??
+    (row['total-floor-area'] as unknown) ??
+    null;
+  const floorArea = raw != null ? Number(raw) : null;
   if (!floorArea || isNaN(floorArea) || floorArea <= 0) return null;
   return floorArea;
 }
 
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// New API returns camelCase address fields (addressLine1..4). Legacy snake-case
+// keys kept as a fallback for the old service.
 function matchEpcRowForSale(
   sale: LandRegistrySale,
   epcRows: Record<string, unknown>[]
@@ -402,7 +527,20 @@ function matchEpcRowForSale(
 
   return (
     epcRows.find((row) => {
+      const combinedNewLines = [
+        row['addressLine1'],
+        row['addressLine2'],
+        row['addressLine3'],
+        row['addressLine4'],
+      ]
+        .filter(Boolean)
+        .join(' ');
+
       const candidates = [
+        // New API (camelCase)
+        normalizeAddress(row['addressLine1'] as string | undefined),
+        normalizeAddress(combinedNewLines || undefined),
+        // Legacy fallbacks (old service)
         normalizeAddress(row.address1 as string | undefined),
         normalizeAddress(row.address as string | undefined),
         normalizeAddress(row['address-line-1'] as string | undefined),
@@ -474,6 +612,17 @@ async function getAveragePricePerSqmForPropertyTypeAndOutcode(
     const floorAreaBySale = new Map<string, number>();
     const homedataCandidates: LandRegistrySale[] = [];
 
+    // ─── EPC MIGRATION ───────────────────────────────────────────────────────
+    // Two-step EPC lookup:
+    //   1. Match each sale to an EPC search row (address match).
+    //   2. Fast path: if the search row already carries floor area (old service,
+    //      or a future search-schema change), use it — no extra call.
+    //   3. Otherwise take the row's certificateNumber and queue a certificate
+    //      lookup, which is where the new service exposes floor area.
+    // Anything that can't be resolved falls through to the Homedata lookup.
+    type CertTarget = { saleKey: string; sale: LandRegistrySale; certificateNumber: string };
+    const certTargets: CertTarget[] = [];
+
     for (const sale of sales) {
       const price = Number(sale.price);
       if (!Number.isFinite(price) || price <= 0) continue;
@@ -483,12 +632,56 @@ async function getAveragePricePerSqmForPropertyTypeAndOutcode(
 
       const epcRows = epcCache.get(salePostcode);
       const matchingRow = epcRows?.length ? matchEpcRowForSale(sale, epcRows) : null;
-      const epcFloorArea = matchingRow ? floorAreaFromEpcRow(matchingRow) : null;
 
-      if (epcFloorArea !== null) {
-        floorAreaBySale.set(saleLookupKey(sale), epcFloorArea);
+      if (!matchingRow) {
+        homedataCandidates.push(sale);
+        continue;
+      }
+
+      // Fast path — search row already has floor area inline.
+      const inlineFloorArea = floorAreaFromEpcRow(matchingRow);
+      if (inlineFloorArea !== null) {
+        floorAreaBySale.set(saleLookupKey(sale), inlineFloorArea);
+        continue;
+      }
+
+      // New service — queue a certificate lookup using the row's certificate number.
+      const certificateNumber =
+        (matchingRow['certificateNumber'] as string | undefined) ??
+        (matchingRow['certificate-number'] as string | undefined) ??
+        (matchingRow['certificateNumber'.toLowerCase()] as string | undefined);
+      if (certificateNumber) {
+        certTargets.push({ saleKey: saleLookupKey(sale), sale, certificateNumber });
       } else {
         homedataCandidates.push(sale);
+      }
+    }
+
+    // Fetch floor area from the certificate endpoint. Deduped by certificate
+    // number and run with bounded concurrency to respect the API's rate limits.
+    // Cap the number of lookups per report; overflow falls back to Homedata.
+    const certLookupTargets = certTargets.slice(0, EPC_CERTIFICATE_LOOKUP_LIMIT);
+    for (const overflow of certTargets.slice(EPC_CERTIFICATE_LOOKUP_LIMIT)) {
+      homedataCandidates.push(overflow.sale);
+    }
+
+    const uniqueCertNumbers = [...new Set(certLookupTargets.map(t => t.certificateNumber))];
+    const certFloorAreas = await mapWithConcurrency(
+      uniqueCertNumbers,
+      EPC_CERTIFICATE_LOOKUP_CONCURRENCY,
+      async (certNumber) => ({ certNumber, floorArea: await fetchCertificateFloorArea(certNumber) })
+    );
+    const floorAreaByCert = new Map<string, number | null>(
+      certFloorAreas.map(r => [r.certNumber, r.floorArea])
+    );
+
+    for (const target of certLookupTargets) {
+      const floorArea = floorAreaByCert.get(target.certificateNumber) ?? null;
+      if (floorArea !== null) {
+        floorAreaBySale.set(target.saleKey, floorArea);
+      } else {
+        // Certificate had no usable floor area → try Homedata as a last resort.
+        homedataCandidates.push(target.sale);
       }
     }
 
