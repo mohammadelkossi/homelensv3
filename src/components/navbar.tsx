@@ -66,6 +66,11 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
                     <Link href="/pricing" className="!text-black hover:!text-gray-600 transition-colors px-4 py-2 no-underline" style={{ color: '#000000', fontWeight: '600' }}>Pricing</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
+                <NavigationMenuItem>
+                  <NavigationMenuLink asChild>
+                    <Link href="/calculator" className="!text-black hover:!text-gray-600 transition-colors px-4 py-2 no-underline" style={{ color: '#000000', fontWeight: '600' }}>Calculator</Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
               </NavigationMenuList>
             </NavigationMenu>
           </div>
@@ -136,6 +141,7 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 py-4 flex flex-col gap-3 bg-white">
             <Link href="/pricing" className="px-4 py-3 text-black font-semibold hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
+            <Link href="/calculator" className="px-4 py-3 text-black font-semibold hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Calculator</Link>
             {user && (
               <>
                 <Link href="/account" className="px-4 py-3 text-black font-medium hover:bg-gray-100 rounded-lg truncate" onClick={() => setMobileMenuOpen(false)}>

@@ -143,9 +143,17 @@ async function getArea(
 
 // ─── Geo / distance helpers (unchanged) ─────────────────────────────────────
 
-async function getPostcodeFromCoordinates(latitude: number, longitude: number): Promise<{ fullPostcode: string | null; outcode: string | null }> {
+async function getPostcodeFromCoordinates(
+  latitude: number,
+  longitude: number
+): Promise<{
+  fullPostcode: string | null
+  outcode: string | null
+  region: string | null
+  country: string | null
+}> {
   if (!latitude || !longitude) {
-    return { fullPostcode: null, outcode: null };
+    return { fullPostcode: null, outcode: null, region: null, country: null };
   }
   try {
     const url = new URL('https://api.postcodes.io/postcodes');
@@ -153,15 +161,21 @@ async function getPostcodeFromCoordinates(latitude: number, longitude: number): 
     url.searchParams.set('lon', String(longitude));
     url.searchParams.set('limit', '1');
     const response = await fetch(url.toString());
-    if (!response.ok) return { fullPostcode: null, outcode: null };
+    if (!response.ok) return { fullPostcode: null, outcode: null, region: null, country: null };
     const data = await response.json();
-    const fullPostcode = data.status === 200 ? data.result?.[0]?.postcode : null;
-    if (!fullPostcode) return { fullPostcode: null, outcode: null };
+    const result = data.status === 200 ? data.result?.[0] : null;
+    const fullPostcode = result?.postcode ?? null;
+    if (!fullPostcode) return { fullPostcode: null, outcode: null, region: null, country: null };
     const outcode = fullPostcode.trim().split(' ')[0] ?? null;
-    return { fullPostcode, outcode };
+    return {
+      fullPostcode,
+      outcode,
+      region: typeof result?.region === 'string' ? result.region : null,
+      country: typeof result?.country === 'string' ? result.country : null,
+    };
   } catch (error) {
     console.error('Error fetching postcode from coordinates:', error);
-    return { fullPostcode: null, outcode: null };
+    return { fullPostcode: null, outcode: null, region: null, country: null };
   }
 }
 
@@ -899,7 +913,7 @@ export async function POST(request: NextRequest) {
     const [housePostcode, nearbyPlaces, postcodeCoords, area] = await Promise.all([
       propertyLat && propertyLon
         ? getPostcodeFromCoordinates(propertyLat, propertyLon)
-        : Promise.resolve({ fullPostcode: null, outcode: null }),
+        : Promise.resolve({ fullPostcode: null, outcode: null, region: null, country: null }),
       Promise.resolve(nearbyPlacesFromApify(apifyAmenities)),
       getPostcodeCoordinates(postcode || ''),
       getArea(propertyData, propertyData.floorplans, propertyData.description, openai),
