@@ -12,6 +12,8 @@ import {
   NavigationMenuList,
   NavigationMenuItem,
   NavigationMenuLink,
+  NavigationMenuTrigger,
+  NavigationMenuContent,
 } from "@/components/ui/navigation-menu"
 
 interface NavbarProps {
@@ -59,7 +61,7 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
           </Link>
 
           <div className="hidden md:flex flex-1 justify-center" style={{ backgroundColor }}>
-            <NavigationMenu className="flex items-center justify-center w-full" style={{ backgroundColor }}>
+            <NavigationMenu className="flex items-center justify-center w-full" viewport={false} style={{ backgroundColor }}>
               <NavigationMenuList className="flex items-center justify-center" style={{ gap: '40px', backgroundColor }}>
                 <NavigationMenuItem>
                   <NavigationMenuLink asChild>
@@ -67,9 +69,15 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
                   </NavigationMenuLink>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <NavigationMenuLink asChild>
-                    <Link href="/calculator" className="!text-black hover:!text-gray-600 transition-colors px-4 py-2 no-underline" style={{ color: '#000000', fontWeight: '600' }}>Calculator</Link>
-                  </NavigationMenuLink>
+                  <NavigationMenuTrigger className="!bg-transparent !text-black hover:!text-gray-600 data-[state=open]:!bg-transparent" style={{ color: '#000000', fontWeight: '600' }}>Tools</NavigationMenuTrigger>
+                  <NavigationMenuContent>
+                    <NavigationMenuLink asChild>
+                      <Link href="/calculator" className="!text-black no-underline whitespace-nowrap" style={{ color: '#000000' }}>Ongoing costs</Link>
+                    </NavigationMenuLink>
+                    <NavigationMenuLink asChild>
+                      <Link href="/upfront-costs" className="!text-black no-underline whitespace-nowrap" style={{ color: '#000000' }}>Upfront costs</Link>
+                    </NavigationMenuLink>
+                  </NavigationMenuContent>
                 </NavigationMenuItem>
               </NavigationMenuList>
             </NavigationMenu>
@@ -141,7 +149,11 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 py-4 flex flex-col gap-3 bg-white">
             <Link href="/pricing" className="px-4 py-3 text-black font-semibold hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
-            <Link href="/calculator" className="px-4 py-3 text-black font-semibold hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Calculator</Link>
+            <div className="px-4 py-3">
+              <p className="text-black font-semibold mb-1">Tools</p>
+              <Link href="/calculator" className="block pl-3 py-2 text-black font-medium hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Ongoing costs</Link>
+              <Link href="/upfront-costs" className="block pl-3 py-2 text-black font-medium hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Upfront costs</Link>
+            </div>
             {user && (
               <>
                 <Link href="/account" className="px-4 py-3 text-black font-medium hover:bg-gray-100 rounded-lg truncate" onClick={() => setMobileMenuOpen(false)}>
