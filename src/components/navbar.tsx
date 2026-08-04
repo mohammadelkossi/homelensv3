@@ -22,7 +22,10 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
+  const [toolsDropdownOpen, setToolsDropdownOpen] = useState(false)
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   const accountDropdownRef = useRef<HTMLDivElement>(null)
+  const toolsDropdownRef = useRef<HTMLDivElement>(null)
   const { openLogin } = useLoginPopup()
   const backgroundColor = isScrolled ? '#FFFFFF' : 'transparent'
 
@@ -31,12 +34,15 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
       if (accountDropdownRef.current && !accountDropdownRef.current.contains(event.target as Node)) {
         setAccountDropdownOpen(false)
       }
+      if (toolsDropdownRef.current && !toolsDropdownRef.current.contains(event.target as Node)) {
+        setToolsDropdownOpen(false)
+      }
     }
-    if (accountDropdownOpen) {
+    if (accountDropdownOpen || toolsDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside)
       return () => document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [accountDropdownOpen])
+  }, [accountDropdownOpen, toolsDropdownOpen])
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -65,6 +71,39 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
                   <NavigationMenuLink asChild>
                     <Link href="/pricing" className="!text-black hover:!text-gray-600 transition-colors px-4 py-2 no-underline" style={{ color: '#000000', fontWeight: '600' }}>Pricing</Link>
                   </NavigationMenuLink>
+                </NavigationMenuItem>
+                <NavigationMenuItem>
+                  <div className="relative" ref={toolsDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setToolsDropdownOpen((o) => !o)}
+                      className="flex items-center gap-1 !text-black hover:!text-gray-600 transition-colors px-4 py-2"
+                      style={{ color: '#000000', fontWeight: '600' }}
+                      aria-expanded={toolsDropdownOpen}
+                      aria-haspopup="true"
+                    >
+                      Tools
+                      <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${toolsDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {toolsDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-1 py-1 w-48 bg-white rounded-lg border border-gray-200 shadow-lg z-50">
+                        <Link
+                          href="/calculator"
+                          className="block px-4 py-2 text-sm text-black hover:bg-gray-100 no-underline"
+                          onClick={() => setToolsDropdownOpen(false)}
+                        >
+                          Ongoing costs
+                        </Link>
+                        <Link
+                          href="/upfront-costs"
+                          className="block px-4 py-2 text-sm text-black hover:bg-gray-100 no-underline"
+                          onClick={() => setToolsDropdownOpen(false)}
+                        >
+                          Upfront costs
+                        </Link>
+                      </div>
+                    )}
+                  </div>
                 </NavigationMenuItem>
               </NavigationMenuList>
             </NavigationMenu>
@@ -136,6 +175,35 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 py-4 flex flex-col gap-3 bg-white">
             <Link href="/pricing" className="px-4 py-3 text-black font-semibold hover:bg-gray-100 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
+            <div>
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-black font-semibold hover:bg-gray-100 rounded-lg"
+                onClick={() => setMobileToolsOpen((o) => !o)}
+                aria-expanded={mobileToolsOpen}
+              >
+                Tools
+                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${mobileToolsOpen ? "rotate-180" : ""}`} />
+              </button>
+              {mobileToolsOpen && (
+                <>
+                  <Link
+                    href="/calculator"
+                    className="block pl-8 pr-4 py-2.5 text-black font-medium hover:bg-gray-100 rounded-lg"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Ongoing costs
+                  </Link>
+                  <Link
+                    href="/upfront-costs"
+                    className="block pl-8 pr-4 py-2.5 text-black font-medium hover:bg-gray-100 rounded-lg"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Upfront costs
+                  </Link>
+                </>
+              )}
+            </div>
             {user && (
               <>
                 <Link href="/account" className="px-4 py-3 text-black font-medium hover:bg-gray-100 rounded-lg truncate" onClick={() => setMobileMenuOpen(false)}>

@@ -126,6 +126,14 @@ export function buildResultsSearchParams(
       params.append(key, JSON.stringify(val))
     } else if (key === "nearbyPlaces" && val !== null) {
       params.append(key, JSON.stringify(val))
+    } else if (key === "planningConstraints" && val !== null) {
+      params.append(key, JSON.stringify(val))
+    } else if (key === "crimeSummary" && val !== null) {
+      params.append(key, JSON.stringify(val))
+    } else if (key === "broadbandCoverage" && val !== null) {
+      params.append(key, JSON.stringify(val))
+    } else if (key === "environmentData" && val !== null) {
+      params.append(key, JSON.stringify(val))
     } else if (key === "averagePriceByYear" && val !== null) {
       params.append(key, JSON.stringify(val))
     } else if (val === null) {

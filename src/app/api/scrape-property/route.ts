@@ -5,10 +5,22 @@ import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import {
+  calculateDistanceKm,
+  getAllNearbyPlaces,
+  type ApifyAmenityFallback,
+} from '@/lib/nearby-amenities';
+import { fetchPlanningConstraints } from '@/lib/planning-constraints';
+import { fetchCrimeSummary } from '@/lib/crime-data';
+import { fetchBroadbandCoverage } from '@/lib/broadband-coverage';
+import { fetchEnvironmentData } from '@/lib/environment-data';
+import {
   hasFreeReportLimitReached,
   reportLimitReachedMessage,
   isProProfile,
 } from '@/lib/report-generation';
+import { getPropertyRecord, searchAddresses } from '@/lib/homedata';
+
+export const maxDuration = 60;
 
 // ─── Helpers (unchanged) ────────────────────────────────────────────────────
 
@@ -137,24 +149,17 @@ async function getArea(
 
 // ─── Geo / distance helpers (unchanged) ─────────────────────────────────────
 
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function toRadians(degrees: number): number {
-  return degrees * (Math.PI / 180);
-}
-
-async function getPostcodeFromCoordinates(latitude: number, longitude: number): Promise<{ fullPostcode: string | null; outcode: string | null }> {
+async function getPostcodeFromCoordinates(
+  latitude: number,
+  longitude: number
+): Promise<{
+  fullPostcode: string | null
+  outcode: string | null
+  region: string | null
+  country: string | null
+}> {
   if (!latitude || !longitude) {
-    return { fullPostcode: null, outcode: null };
+    return { fullPostcode: null, outcode: null, region: null, country: null };
   }
   try {
     const url = new URL('https://api.postcodes.io/postcodes');
@@ -162,217 +167,49 @@ async function getPostcodeFromCoordinates(latitude: number, longitude: number): 
     url.searchParams.set('lon', String(longitude));
     url.searchParams.set('limit', '1');
     const response = await fetch(url.toString());
-    if (!response.ok) return { fullPostcode: null, outcode: null };
+    if (!response.ok) return { fullPostcode: null, outcode: null, region: null, country: null };
     const data = await response.json();
-    const fullPostcode = data.status === 200 ? data.result?.[0]?.postcode : null;
-    if (!fullPostcode) return { fullPostcode: null, outcode: null };
+    const result = data.status === 200 ? data.result?.[0] : null;
+    const fullPostcode = result?.postcode ?? null;
+    if (!fullPostcode) return { fullPostcode: null, outcode: null, region: null, country: null };
     const outcode = fullPostcode.trim().split(' ')[0] ?? null;
-    return { fullPostcode, outcode };
+    return {
+      fullPostcode,
+      outcode,
+      region: typeof result?.region === 'string' ? result.region : null,
+      country: typeof result?.country === 'string' ? result.country : null,
+    };
   } catch (error) {
     console.error('Error fetching postcode from coordinates:', error);
-    return { fullPostcode: null, outcode: null };
+    return { fullPostcode: null, outcode: null, region: null, country: null };
   }
 }
 
-type NearbyPlace = { name: string; distance: number };
+const HOMEDATA_FLOOR_AREA_LOOKUP_LIMIT = 25;
+const HOMEDATA_LOOKUP_CONCURRENCY = 5;
 
-type AmenityCategory =
-  | 'school'
-  | 'station'
-  | 'park'
-  | 'supermarket'
-  | 'church'
-  | 'mosque'
-  | 'synagogue'
-  | 'hindu_temple'
-  | 'gym'
-  | 'hospital';
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// Base host for the new "Get energy performance of buildings data" service.
+const EPC_API_BASE_DEFAULT = 'https://api.get-energy-performance-data.communities.gov.uk';
+// The new /api/domestic/search returns a summary WITHOUT floor area. Floor area
+// lives on the full certificate, fetched via /api/certificate?certificate_number=…
+// These bound how many certificate lookups we do per report (latency + rate limits;
+// the service allows 6000 requests / 5 min per IP). Overflow falls back to Homedata.
+const EPC_CERTIFICATE_LOOKUP_LIMIT = 150;
+const EPC_CERTIFICATE_LOOKUP_CONCURRENCY = 8;
 
-type OverpassElement = {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-};
-
-const OVERPASS_AMENITY_RADIUS_M = 5000;
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-
-function getOverpassElementCoords(element: OverpassElement): { lat: number; lon: number } | null {
-  if (element.lat != null && element.lon != null) return { lat: element.lat, lon: element.lon };
-  if (element.center) return { lat: element.center.lat, lon: element.center.lon };
-  return null;
-}
-
-function categorizeOverpassAmenity(tags: Record<string, string>): AmenityCategory | null {
-  const amenity = tags.amenity;
-  const shop = tags.shop;
-  const leisure = tags.leisure;
-  const railway = tags.railway;
-  const religion = (tags.religion || '').toLowerCase();
-  const landuse = tags.landuse;
-  const publicTransport = tags.public_transport;
-
-  if (amenity === 'hospital') return 'hospital';
-  if (amenity === 'school' || amenity === 'college' || tags.building === 'school') return 'school';
-  if (leisure === 'fitness_centre' || leisure === 'sports_centre' || amenity === 'gym') return 'gym';
-  if (leisure === 'park' || leisure === 'garden' || landuse === 'recreation_ground') return 'park';
-  if (shop === 'supermarket') return 'supermarket';
-  if (
-    railway === 'station' ||
-    railway === 'halt' ||
-    amenity === 'bus_station' ||
-    publicTransport === 'station'
-  ) {
-    return 'station';
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let index = 0; index < items.length; index += limit) {
+    const batch = items.slice(index, index + limit);
+    const batchResults = await Promise.all(batch.map(mapper));
+    results.push(...batchResults);
   }
-  if (amenity === 'place_of_worship') {
-    if (religion === 'muslim') return 'mosque';
-    if (religion === 'jewish') return 'synagogue';
-    if (religion === 'hindu') return 'hindu_temple';
-    return 'church';
-  }
-  if (tags.building === 'church') return 'church';
-  return null;
-}
-
-function buildOverpassAmenityQuery(latitude: number, longitude: number, radiusMeters: number): string {
-  const around = `(around:${radiusMeters},${latitude},${longitude})`;
-  const selectors = [
-    `node["amenity"="school"]${around}`,
-    `way["amenity"="school"]${around}`,
-    `node["amenity"="college"]${around}`,
-    `way["amenity"="college"]${around}`,
-    `node["railway"="station"]${around}`,
-    `way["railway"="station"]${around}`,
-    `node["railway"="halt"]${around}`,
-    `way["railway"="halt"]${around}`,
-    `node["public_transport"="station"]${around}`,
-    `way["public_transport"="station"]${around}`,
-    `node["amenity"="bus_station"]${around}`,
-    `way["amenity"="bus_station"]${around}`,
-    `node["leisure"="park"]${around}`,
-    `way["leisure"="park"]${around}`,
-    `node["leisure"="garden"]${around}`,
-    `way["leisure"="garden"]${around}`,
-    `node["landuse"="recreation_ground"]${around}`,
-    `way["landuse"="recreation_ground"]${around}`,
-    `node["shop"="supermarket"]${around}`,
-    `way["shop"="supermarket"]${around}`,
-    `node["amenity"="place_of_worship"]${around}`,
-    `way["amenity"="place_of_worship"]${around}`,
-    `node["building"="church"]${around}`,
-    `way["building"="church"]${around}`,
-    `node["leisure"="fitness_centre"]${around}`,
-    `way["leisure"="fitness_centre"]${around}`,
-    `node["leisure"="sports_centre"]${around}`,
-    `way["leisure"="sports_centre"]${around}`,
-    `node["amenity"="gym"]${around}`,
-    `way["amenity"="gym"]${around}`,
-    `node["amenity"="hospital"]${around}`,
-    `way["amenity"="hospital"]${around}`,
-  ];
-  return `[out:json][timeout:25];(${selectors.join(';')};);out center tags;`;
-}
-
-async function fetchOverpassAmenities(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number = OVERPASS_AMENITY_RADIUS_M
-): Promise<OverpassElement[]> {
-  const query = buildOverpassAmenityQuery(latitude, longitude, radiusMeters);
-  const response = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'HomeLens/1.0 (property report amenities)',
-    },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  if (!response.ok) {
-    console.error('Overpass API error:', response.status, await response.text().catch(() => ''));
-    return [];
-  }
-  const data = await response.json();
-  return Array.isArray(data.elements) ? data.elements : [];
-}
-
-function takeNearestPlaces(
-  places: NearbyPlace[],
-  maxResults: number
-): NearbyPlace[] {
-  return [...places].sort((a, b) => a.distance - b.distance).slice(0, maxResults);
-}
-
-async function getAllNearbyPlaces(latitude: number, longitude: number) {
-  const empty = {
-    schools: [] as NearbyPlace[],
-    stations: [] as NearbyPlace[],
-    parks: [] as NearbyPlace[],
-    supermarkets: [] as NearbyPlace[],
-    placesOfWorship: [] as NearbyPlace[],
-    gyms: [] as NearbyPlace[],
-    hospitals: [] as NearbyPlace[],
-  };
-
-  if (!latitude || !longitude) return empty;
-
-  try {
-    const elements = await fetchOverpassAmenities(latitude, longitude);
-    const buckets: Record<AmenityCategory, NearbyPlace[]> = {
-      school: [],
-      station: [],
-      park: [],
-      supermarket: [],
-      church: [],
-      mosque: [],
-      synagogue: [],
-      hindu_temple: [],
-      gym: [],
-      hospital: [],
-    };
-    const seen = new Set<string>();
-
-    for (const element of elements) {
-      const tags = element.tags;
-      if (!tags?.name) continue;
-
-      const category = categorizeOverpassAmenity(tags);
-      if (!category) continue;
-
-      const coords = getOverpassElementCoords(element);
-      if (!coords) continue;
-
-      const dedupeKey = `${category}:${element.type}/${element.id}`;
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
-
-      buckets[category].push({
-        name: tags.name,
-        distance: calculateDistance(latitude, longitude, coords.lat, coords.lon),
-      });
-    }
-
-    const placesOfWorship = takeNearestPlaces(
-      [...buckets.church, ...buckets.mosque, ...buckets.synagogue, ...buckets.hindu_temple],
-      3
-    );
-
-    return {
-      schools: takeNearestPlaces(buckets.school, 3),
-      stations: takeNearestPlaces(buckets.station, 3),
-      parks: takeNearestPlaces(buckets.park, 3),
-      supermarkets: takeNearestPlaces(buckets.supermarket, 3),
-      placesOfWorship,
-      gyms: takeNearestPlaces(buckets.gym, 3),
-      hospitals: takeNearestPlaces(buckets.hospital, 3),
-    };
-  } catch (error) {
-    console.error('Error fetching nearby places from Overpass:', error);
-    return empty;
-  }
+  return results;
 }
 
 // ─── Address / price helpers (unchanged) ────────────────────────────────────
@@ -541,24 +378,220 @@ LIMIT 5`;
   return null;
 }
 
-async function fetchEpcRowsForPostcode(postcode: string): Promise<any[]> {
-  if (!postcode || !process.env.EPC_API_EMAIL || !process.env.EPC_API_KEY) return [];
-  try {
-    const response = await fetch(
-      `https://epc.opendatacommunities.org/api/v1/domestic/search?postcode=${encodeURIComponent(postcode)}`,
-      {
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// Migrated from the retired epc.opendatacommunities.org service to the new
+// "Get energy performance of buildings data" service.
+//   • Default endpoint → https://api.get-energy-performance-data.communities.gov.uk/api/domestic/search
+//   • Auth → Bearer token only (old Basic email:apikey scheme removed)
+//   • Query param → page_size (was: size)
+//   • Response shape → { data: [...], pagination: {...} }  (was: { rows: [...] })
+//   • 404 = "no certificates for this postcode" (normal), 429 = rate limited (retry)
+async function fetchEpcRowsForPostcode(postcode: string, retries = 2): Promise<any[]> {
+  if (!postcode) return [];
+
+  const bearerToken = process.env.EPC_API_BEARER_TOKEN?.trim();
+  if (!bearerToken) return [];
+
+  const base = process.env.EPC_API_BASE?.trim() || EPC_API_BASE_DEFAULT;
+  const endpoint =
+    process.env.EPC_API_ENDPOINT?.trim() || `${base}/api/domestic/search`;
+
+  const url = `${endpoint}?postcode=${encodeURIComponent(postcode)}&page_size=500`;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        cache: 'no-store',
         headers: {
           Accept: 'application/json',
-          Authorization: `Basic ${Buffer.from(`${process.env.EPC_API_EMAIL}:${process.env.EPC_API_KEY}`).toString('base64')}`,
+          Authorization: `Bearer ${bearerToken}`,
         },
+      });
+
+      // 429: back off and retry (honour Retry-After header if present)
+      if (response.status === 429) {
+        const wait = Number(response.headers.get('Retry-After')) * 1000 || 1000 * (attempt + 1);
+        await new Promise(r => setTimeout(r, wait));
+        continue;
       }
-    );
-    if (!response.ok) return [];
-    const data = await response.json();
-    return Array.isArray(data.rows) ? data.rows : [];
+
+      // 404 = no certificates found for this postcode (normal, not an error)
+      if (response.status === 404) return [];
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!response.ok || !contentType.includes('json')) return [];
+
+      const data = await response.json();
+      // New API shape: { data: [...], pagination: {...} }
+      return Array.isArray(data?.data) ? data.data : [];
+    } catch (error) {
+      console.error('Error fetching EPC data:', error);
+      return [];
+    }
+  }
+  return [];
+}
+
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// Pull floor area out of a full EPC certificate document. The certificate
+// endpoint's response is free-form in the spec, so we defensively accept every
+// plausible spelling of the floor-area key (camelCase, hyphenated, snake_case,
+// upper). Returns null if none present or the value isn't a positive number.
+function extractFloorArea(doc: Record<string, unknown> | null | undefined): number | null {
+  if (!doc || typeof doc !== 'object') return null;
+  const candidateKeys = [
+    'totalFloorArea',
+    'total-floor-area',
+    'total_floor_area',
+    'TOTAL_FLOOR_AREA',
+    'totalFloorAreaSquareMetres',
+    'floorArea',
+  ];
+  for (const key of candidateKeys) {
+    const raw = (doc as Record<string, unknown>)[key];
+    if (raw != null && raw !== '') {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return null;
+}
+
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// Fetch a single EPC certificate by its certificate number and return its floor
+// area. This is the second half of the two-step lookup: search gives us the
+// certificateNumber, this gives us the floor area the search summary omits.
+// Response shape: { data: { ...full EPC document... } }.
+async function fetchCertificateFloorArea(certificateNumber: string, retries = 2): Promise<number | null> {
+  if (!certificateNumber) return null;
+
+  const bearerToken = process.env.EPC_API_BEARER_TOKEN?.trim();
+  if (!bearerToken) return null;
+
+  const base = process.env.EPC_API_BASE?.trim() || EPC_API_BASE_DEFAULT;
+  const url = `${base}/api/certificate?certificate_number=${encodeURIComponent(certificateNumber)}`;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${bearerToken}`,
+        },
+      });
+
+      // 429: back off and retry (honour Retry-After header if present)
+      if (response.status === 429) {
+        const wait = Number(response.headers.get('Retry-After')) * 1000 || 1000 * (attempt + 1);
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+
+      // 404 = certificate not found (normal, not an error)
+      if (response.status === 404) return null;
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!response.ok || !contentType.includes('json')) return null;
+
+      const json = await response.json();
+      // CertificateResponse: { data: { ...full EPC document... } }
+      const doc = (json?.data ?? json) as Record<string, unknown>;
+      return extractFloorArea(doc);
+    } catch (error) {
+      console.error('Error fetching EPC certificate:', error);
+      return null;
+    }
+  }
+  return null;
+}
+
+type LandRegistrySale = {
+  paon?: string | null;
+  saon?: string | null;
+  street?: string | null;
+  postcode?: string | null;
+  price?: number | null;
+};
+
+function saleLookupKey(sale: LandRegistrySale): string {
+  return [sale.postcode, sale.paon, sale.saon, sale.street]
+    .map((part) => (part ?? '').trim().toLowerCase())
+    .join('|');
+}
+
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// NOTE: the new /api/domestic/search endpoint does NOT return floor area in its
+// payload, so this will return null for new-API rows. Kept legacy keys as a
+// fallback in case EPC_API_ENDPOINT is still pointed at the old service. See
+// the message accompanying this file for how to restore floor area if needed.
+function floorAreaFromEpcRow(row: Record<string, unknown>): number | null {
+  const raw =
+    (row['totalFloorArea'] as unknown) ??
+    (row['total-floor-area'] as unknown) ??
+    null;
+  const floorArea = raw != null ? Number(raw) : null;
+  if (!floorArea || isNaN(floorArea) || floorArea <= 0) return null;
+  return floorArea;
+}
+
+// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
+// New API returns camelCase address fields (addressLine1..4). Legacy snake-case
+// keys kept as a fallback for the old service.
+function matchEpcRowForSale(
+  sale: LandRegistrySale,
+  epcRows: Record<string, unknown>[]
+): Record<string, unknown> | null {
+  const targetAddress = normalizeAddress(`${sale.paon ?? ''} ${sale.saon ?? ''} ${sale.street ?? ''}`);
+  if (!targetAddress) return null;
+
+  return (
+    epcRows.find((row) => {
+      const combinedNewLines = [
+        row['addressLine1'],
+        row['addressLine2'],
+        row['addressLine3'],
+        row['addressLine4'],
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      const candidates = [
+        // New API (camelCase)
+        normalizeAddress(row['addressLine1'] as string | undefined),
+        normalizeAddress(combinedNewLines || undefined),
+        // Legacy fallbacks (old service)
+        normalizeAddress(row.address1 as string | undefined),
+        normalizeAddress(row.address as string | undefined),
+        normalizeAddress(row['address-line-1'] as string | undefined),
+      ].filter(Boolean) as string[];
+      return candidates.some((candidate) => candidate === targetAddress);
+    }) ?? null
+  );
+}
+
+async function getFloorAreaForSaleFromHomedata(sale: LandRegistrySale): Promise<number | null> {
+  if (!process.env.HOMEDATA_API_KEY) return null;
+
+  const query = [sale.paon, sale.saon, sale.street, sale.postcode].filter(Boolean).join(' ').trim();
+  if (!query) return null;
+
+  try {
+    const suggestions = await searchAddresses(query);
+    const uprn = suggestions[0]?.uprn;
+    if (!uprn) return null;
+
+    const property = await getPropertyRecord(String(uprn));
+    const area =
+      property.epc_floor_area ??
+      property.predicted_floor_area ??
+      property.internal_area_sqm;
+    const floorArea = area != null ? Number(area) : null;
+    if (!floorArea || !Number.isFinite(floorArea) || floorArea <= 0) return null;
+    return floorArea;
   } catch (error) {
-    console.error('Error fetching EPC data:', error);
-    return [];
+    console.error('Homedata floor area lookup failed:', error);
+    return null;
   }
 }
 
@@ -596,32 +629,105 @@ async function getAveragePricePerSqmForPropertyTypeAndOutcode(
     const epcResults = await Promise.all(uniquePostcodes.map(pc => fetchEpcRowsForPostcode(pc)));
     const epcCache = new Map<string, any[]>(uniquePostcodes.map((pc, i) => [pc, epcResults[i]]));
 
-    let sum = 0, count = 0, weightedNumerator = 0, weightedDenominator = 0;
+    const floorAreaBySale = new Map<string, number>();
+    const homedataCandidates: LandRegistrySale[] = [];
+
+    // ─── EPC MIGRATION ───────────────────────────────────────────────────────
+    // Two-step EPC lookup:
+    //   1. Match each sale to an EPC search row (address match).
+    //   2. Fast path: if the search row already carries floor area (old service,
+    //      or a future search-schema change), use it — no extra call.
+    //   3. Otherwise take the row's certificateNumber and queue a certificate
+    //      lookup, which is where the new service exposes floor area.
+    // Anything that can't be resolved falls through to the Homedata lookup.
+    type CertTarget = { saleKey: string; sale: LandRegistrySale; certificateNumber: string };
+    const certTargets: CertTarget[] = [];
 
     for (const sale of sales) {
-      const salePostcode = sale.postcode?.toUpperCase?.() ?? null;
-      if (!salePostcode) continue;
-      const epcRows = epcCache.get(salePostcode);
-      if (!epcRows?.length) continue;
-
-      const targetAddress = normalizeAddress(`${sale.paon ?? ''} ${sale.saon ?? ''} ${sale.street ?? ''}`);
-      if (!targetAddress) continue;
-
-      const matchingRow = epcRows.find(row => {
-        const candidates = [
-          normalizeAddress(row.address1),
-          normalizeAddress(row.address),
-          normalizeAddress(row['address-line-1']),
-        ].filter(Boolean) as string[];
-        return candidates.some(c => c === targetAddress);
-      });
-      if (!matchingRow) continue;
-
-      const floorArea = matchingRow['total-floor-area'] ? Number(matchingRow['total-floor-area']) : null;
-      if (!floorArea || isNaN(floorArea) || floorArea <= 0) continue;
-
       const price = Number(sale.price);
       if (!Number.isFinite(price) || price <= 0) continue;
+
+      const salePostcode = sale.postcode?.toUpperCase?.() ?? null;
+      if (!salePostcode) continue;
+
+      const epcRows = epcCache.get(salePostcode);
+      const matchingRow = epcRows?.length ? matchEpcRowForSale(sale, epcRows) : null;
+
+      if (!matchingRow) {
+        homedataCandidates.push(sale);
+        continue;
+      }
+
+      // Fast path — search row already has floor area inline.
+      const inlineFloorArea = floorAreaFromEpcRow(matchingRow);
+      if (inlineFloorArea !== null) {
+        floorAreaBySale.set(saleLookupKey(sale), inlineFloorArea);
+        continue;
+      }
+
+      // New service — queue a certificate lookup using the row's certificate number.
+      const certificateNumber =
+        (matchingRow['certificateNumber'] as string | undefined) ??
+        (matchingRow['certificate-number'] as string | undefined) ??
+        (matchingRow['certificateNumber'.toLowerCase()] as string | undefined);
+      if (certificateNumber) {
+        certTargets.push({ saleKey: saleLookupKey(sale), sale, certificateNumber });
+      } else {
+        homedataCandidates.push(sale);
+      }
+    }
+
+    // Fetch floor area from the certificate endpoint. Deduped by certificate
+    // number and run with bounded concurrency to respect the API's rate limits.
+    // Cap the number of lookups per report; overflow falls back to Homedata.
+    const certLookupTargets = certTargets.slice(0, EPC_CERTIFICATE_LOOKUP_LIMIT);
+    for (const overflow of certTargets.slice(EPC_CERTIFICATE_LOOKUP_LIMIT)) {
+      homedataCandidates.push(overflow.sale);
+    }
+
+    const uniqueCertNumbers = [...new Set(certLookupTargets.map(t => t.certificateNumber))];
+    const certFloorAreas = await mapWithConcurrency(
+      uniqueCertNumbers,
+      EPC_CERTIFICATE_LOOKUP_CONCURRENCY,
+      async (certNumber) => ({ certNumber, floorArea: await fetchCertificateFloorArea(certNumber) })
+    );
+    const floorAreaByCert = new Map<string, number | null>(
+      certFloorAreas.map(r => [r.certNumber, r.floorArea])
+    );
+
+    for (const target of certLookupTargets) {
+      const floorArea = floorAreaByCert.get(target.certificateNumber) ?? null;
+      if (floorArea !== null) {
+        floorAreaBySale.set(target.saleKey, floorArea);
+      } else {
+        // Certificate had no usable floor area → try Homedata as a last resort.
+        homedataCandidates.push(target.sale);
+      }
+    }
+
+    const homedataTargets = homedataCandidates.slice(0, HOMEDATA_FLOOR_AREA_LOOKUP_LIMIT);
+    const homedataResults = await mapWithConcurrency(homedataTargets, HOMEDATA_LOOKUP_CONCURRENCY, async (sale) => ({
+      key: saleLookupKey(sale),
+      floorArea: await getFloorAreaForSaleFromHomedata(sale),
+    }));
+
+    for (const result of homedataResults) {
+      if (result.floorArea !== null) {
+        floorAreaBySale.set(result.key, result.floorArea);
+      }
+    }
+
+    let sum = 0;
+    let count = 0;
+    let weightedNumerator = 0;
+    let weightedDenominator = 0;
+
+    for (const sale of sales) {
+      const price = Number(sale.price);
+      if (!Number.isFinite(price) || price <= 0) continue;
+
+      const floorArea = floorAreaBySale.get(saleLookupKey(sale));
+      if (floorArea === undefined) continue;
 
       const pricePerSqm = price / floorArea;
       sum += pricePerSqm;
@@ -770,6 +876,7 @@ export async function POST(request: NextRequest) {
       propertyUrls: [{ url }],
       fullPropertyDetails: true,
       includePriceHistory: true,
+      includeNearestSchools: true,
       monitoringMode: false,
       maxProperties: 1,
     });
@@ -804,19 +911,25 @@ export async function POST(request: NextRequest) {
     //   Batch 1 — things that don't depend on each other at all
     //   Batch 2 — things that need the postcode from batch 1
 
-    const [housePostcode, nearbyPlaces, postcodeCoords, area] = await Promise.all([
+    const apifyAmenities: ApifyAmenityFallback = {
+      nearestStations: propertyData.nearestStations,
+      nearestSchools: propertyData.nearestSchools,
+    };
+
+    const [housePostcode, nearbyPlaces, postcodeCoords, area, planningConstraints, crimeSummary, environmentData] = await Promise.all([
       propertyLat && propertyLon
         ? getPostcodeFromCoordinates(propertyLat, propertyLon)
-        : Promise.resolve({ fullPostcode: null, outcode: null }),
-      propertyLat && propertyLon
-        ? getAllNearbyPlaces(propertyLat, propertyLon)
-        : Promise.resolve({ schools: [], stations: [], parks: [], supermarkets: [], placesOfWorship: [], gyms: [], hospitals: [] }),
+        : Promise.resolve({ fullPostcode: null, outcode: null, region: null, country: null }),
+      getAllNearbyPlaces(propertyLat, propertyLon, apifyAmenities),
       getPostcodeCoordinates(postcode || ''),
       getArea(propertyData, propertyData.floorplans, propertyData.description, openai),
+      fetchPlanningConstraints(propertyLat, propertyLon),
+      fetchCrimeSummary(propertyLat, propertyLon),
+      fetchEnvironmentData(propertyLat, propertyLon),
     ]);
 
     // Batch 2 — needs housePostcode from batch 1
-    const [salesCountPast12Months, averagePriceData, pricePerSqmStats, matchedFullAddress] = await Promise.all([
+    const [salesCountPast12Months, averagePriceData, pricePerSqmStats, matchedFullAddress, broadbandCoverage] = await Promise.all([
       getSalesCountPast12Months(housePostcode.fullPostcode),
       getAveragePricesByYear(housePostcode.outcode, propertyTypeCode),
       getAveragePricePerSqmForPropertyTypeAndOutcode(housePostcode.outcode, propertyTypeCode),
@@ -826,13 +939,14 @@ export async function POST(request: NextRequest) {
         priceHistory,
         propertyData.displayAddress || ''
       ),
+      fetchBroadbandCoverage(housePostcode.fullPostcode),
     ]);
 
     // ─────────────────────────────────────────────────────────────────────────
 
     const distance =
       propertyLat && propertyLon && postcodeCoords.latitude !== null && postcodeCoords.longitude !== null
-        ? calculateDistance(propertyLat, propertyLon, postcodeCoords.latitude, postcodeCoords.longitude)
+        ? calculateDistanceKm(propertyLat, propertyLon, postcodeCoords.latitude, postcodeCoords.longitude)
         : null;
 
     const result = {
@@ -859,6 +973,10 @@ export async function POST(request: NextRequest) {
       houseFullPostcode: housePostcode.fullPostcode,
       houseOutcode: housePostcode.outcode,
       nearbyPlaces,
+      planningConstraints,
+      crimeSummary,
+      broadbandCoverage,
+      environmentData,
       salesCountPast12Months,
       averagePriceByYear: averagePriceData?.yearlyAverages ?? null,
       averagePriceFiveYear: averagePriceData?.overallAverage ?? null,

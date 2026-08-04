@@ -3,14 +3,23 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { GraduationCap, Train, TreePine, ShoppingCart, Church, Dumbbell, Heart, MapPin } from "lucide-react"
+import { GraduationCap, Train, TreePine, ShoppingCart, Church, Dumbbell, Heart, MapPin, Stethoscope, Smile, Baby } from "lucide-react"
 
 interface NearbyAmenitiesProps {
   amenities: {
     category: string
     name: string
     distance: number
+    rating?: string
   }[]
+  loading?: boolean
+}
+
+const ratingColor: Record<string, string> = {
+  Outstanding: "text-emerald-600",
+  Good: "text-green-600",
+  "Requires improvement": "text-amber-600",
+  Inadequate: "text-red-600",
 }
 
 const categoryConfig: Record<string, { icon: typeof GraduationCap; color: string }> = {
@@ -21,9 +30,12 @@ const categoryConfig: Record<string, { icon: typeof GraduationCap; color: string
   "Place of Worship": { icon: Church, color: "bg-[#5E7CE2]/10 text-[#5E7CE2]" },
   Gym: { icon: Dumbbell, color: "bg-pink-500/10 text-pink-600" },
   Hospital: { icon: Heart, color: "bg-red-500/10 text-red-600" },
+  "GP Surgery": { icon: Stethoscope, color: "bg-teal-500/10 text-teal-600" },
+  Dentist: { icon: Smile, color: "bg-cyan-500/10 text-cyan-600" },
+  Nursery: { icon: Baby, color: "bg-orange-500/10 text-orange-600" },
 }
 
-export function NearbyAmenities({ amenities }: NearbyAmenitiesProps) {
+export function NearbyAmenities({ amenities, loading = false }: NearbyAmenitiesProps) {
   const categories = [...new Set(amenities.map((a) => a.category))]
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
 
@@ -64,6 +76,15 @@ export function NearbyAmenities({ amenities }: NearbyAmenitiesProps) {
         </div>
       </CardHeader>
       <CardContent>
+        {loading ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            Loading nearby amenities...
+          </p>
+        ) : amenities.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            No nearby amenities found for this property. Try generating a new report.
+          </p>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredAmenities.map((amenity, index) => {
             const config = categoryConfig[amenity.category] || {
@@ -87,12 +108,20 @@ export function NearbyAmenities({ amenities }: NearbyAmenitiesProps) {
                       {amenity.distance.toFixed(2)} km
                     </span>
                   </div>
-                  <span className="text-xs text-muted-foreground/70 mt-0.5">{amenity.category}</span>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <span className="text-xs text-muted-foreground/70">{amenity.category}</span>
+                    {amenity.rating && ratingColor[amenity.rating] && (
+                      <span className={`text-xs font-medium whitespace-nowrap ${ratingColor[amenity.rating]}`}>
+                        CQC: {amenity.rating}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )
           })}
         </div>
+        )}
       </CardContent>
     </Card>
   )

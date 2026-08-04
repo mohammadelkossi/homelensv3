@@ -15,6 +15,11 @@ import {
   readPendingReportPayload,
   type PendingReportPayload,
 } from "@/lib/report-generation"
+import { storeNearbyPlaces } from "@/lib/nearby-amenities"
+import { storePlanningConstraints } from "@/lib/planning-constraints"
+import { storeCrimeSummary } from "@/lib/crime-data"
+import { storeBroadbandCoverage } from "@/lib/broadband-coverage"
+import { storeEnvironmentData } from "@/lib/environment-data"
 
 export default function GeneratingPage() {
   const router = useRouter()
@@ -72,6 +77,21 @@ export default function GeneratingPage() {
       }
 
       const data = await response.json()
+      if (data.nearbyPlaces) {
+        storeNearbyPlaces(data.nearbyPlaces)
+      }
+      if (data.planningConstraints) {
+        storePlanningConstraints(data.planningConstraints)
+      }
+      if (data.crimeSummary) {
+        storeCrimeSummary(data.crimeSummary)
+      }
+      if (data.broadbandCoverage) {
+        storeBroadbandCoverage(data.broadbandCoverage)
+      }
+      if (data.environmentData) {
+        storeEnvironmentData(data.environmentData)
+      }
       posthog.capture("report_generated", { property_url: payload.url })
       clearPendingReportPayload()
       setComplete(true)
