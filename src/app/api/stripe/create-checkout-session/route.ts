@@ -69,6 +69,9 @@ export async function POST(request: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       client_reference_id: user.id,
       customer_email: user.email ?? undefined,
+      // Payment mode does not create a Customer by default; the webhook needs
+      // session.customer to grant lifetime Pro, so always create one.
+      ...(plan === "lifetime" ? { customer_creation: "always" as const } : {}),
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: { plan },

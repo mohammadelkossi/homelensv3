@@ -133,7 +133,7 @@ export default function CalculatorPage() {
             <div className="flex items-center gap-3 mb-3">
               <Calculator className="h-8 w-8 text-[#0A369D]" />
               <p className="text-sm font-semibold uppercase tracking-wide text-[#4472CA]">
-                Ongoing costs
+                Property cost calculator
               </p>
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-[#0A369D] mb-3">

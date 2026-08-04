@@ -72,19 +72,25 @@ export async function POST(request: NextRequest) {
         }
 
         const customerId = typeof customer === "string" ? customer : customer?.id ?? null
-        if (!customerId) {
-          console.error("[Stripe Webhook] checkout.session.completed missing customer")
-          break
-        }
+        const isLifetimePurchase =
+          session.mode === "payment" || session.metadata?.plan === "lifetime"
 
         console.log("[Stripe Webhook] User ID being updated (checkout.session.completed):", clientReferenceId)
 
-        if (session.mode === "payment") {
+        if (isLifetimePurchase) {
+          // Lifetime one-time payments may arrive without a Customer on older
+          // sessions (customer_creation was not always set). Still grant Pro.
+          if (!customerId) {
+            console.warn(
+              "[Stripe Webhook] Lifetime checkout missing customer — granting Pro without stripe_customer_id"
+            )
+          }
+
           const { error: upsertError } = await supabase.from("profiles").upsert(
             {
               id: clientReferenceId,
               plan: "pro",
-              stripe_customer_id: customerId,
+              ...(customerId ? { stripe_customer_id: customerId } : {}),
               stripe_subscription_id: null,
               stripe_status: STRIPE_PRO_STATUS_LIFETIME,
             },
@@ -102,6 +108,11 @@ export async function POST(request: NextRequest) {
             event: "lifetime_purchase_activated",
             properties: { plan: "pro", billing: "lifetime" },
           })
+          break
+        }
+
+        if (!customerId) {
+          console.error("[Stripe Webhook] checkout.session.completed missing customer")
           break
         }
 
