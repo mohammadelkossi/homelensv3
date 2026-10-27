@@ -32,7 +32,7 @@ describe("recommendedOfferRange", () => {
     expect(result.high).toBeLessThanOrEqual(510_000 * 0.95)
   })
 
-  it("doesn't cap a home on the market for exactly 50 days", () => {
+  it("at exactly 50 days, only the £10k rule caps the top", () => {
     const result = recommendedOfferRange({
       askingPrice: 500_000,
       daysOnMarket: 50,
@@ -40,7 +40,7 @@ describe("recommendedOfferRange", () => {
       sellersGainPercent: 5,
       recentSalesCount: 12,
     })
-    expect(result.high).toBe(500_000)
+    expect(result.high).toBe(490_000)
   })
 
   it("widens the discount when multiple negative signals stack up", () => {
@@ -68,7 +68,8 @@ describe("recommendedOfferRange", () => {
       recentSalesCount: 12,
     })
     expect(result.reasons).toHaveLength(0)
-    expect(result.high).toBe(500_000)
+    expect(result.high).toBe(490_000)
+    expect(result.low).toBeLessThanOrEqual(480_000)
     expect(result.low).toBeLessThan(result.high)
   })
 
@@ -210,6 +211,22 @@ describe("districtValueGrowth", () => {
     const result = districtValueGrowth({ "2022": 500_000, "2023": 520_000, "2025": 589_000 })
     expect(result).not.toBeNull()
     expect(result!.lastYearPercent).toBeNull()
+  })
+})
+
+describe("recommendedOfferRange £10k/£20k caps", () => {
+  it("never tops out within £10k of asking, or bottoms out within £20k", () => {
+    for (const askingPrice of [150_000, 349_000, 550_000, 1_250_000]) {
+      const result = recommendedOfferRange({ askingPrice, daysOnMarket: 5, premiumOverDistrictPercent: -10, sellersGainPercent: 0, recentSalesCount: 20 })
+      expect(result.high).toBeLessThanOrEqual(askingPrice - 10_000)
+      expect(result.low).toBeLessThanOrEqual(askingPrice - 20_000)
+      expect(result.low).toBeLessThan(result.high)
+    }
+  })
+  it("gives £530k–£540k as the best case for a £550k asking price", () => {
+    const result = recommendedOfferRange({ askingPrice: 550_000, daysOnMarket: 5, premiumOverDistrictPercent: -10, sellersGainPercent: 0, recentSalesCount: 20 })
+    expect(result.high).toBe(540_000)
+    expect(result.low).toBeLessThanOrEqual(530_000)
   })
 })
 

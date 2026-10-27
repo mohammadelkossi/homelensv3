@@ -13,6 +13,35 @@ export const STALE_LISTING_DAYS = 50
 /** For a stale listing, the range's top is at least this % below the asking price. */
 export const STALE_LISTING_MIN_PERCENT_BELOW = 5
 
+/** However strong the home, the range's top is at least this far below the asking price. */
+export const MIN_POUNDS_BELOW_ASKING_HIGH = 10_000
+/** ...and the range's bottom at least this far below it. */
+export const MIN_POUNDS_BELOW_ASKING_LOW = 20_000
+
+export type OfferLimits = {
+  /** The highest the range's top may be. */
+  maxHigh: number
+  /** The highest the range's bottom may be. */
+  maxLow: number
+  /** The lowest the range's bottom may be: 10% below asking, or lower if that's needed to sit £20k below. */
+  floor: number
+}
+
+/**
+ * Every hard limit on a recommended offer, rounded to `step` so rounding can't break them:
+ * top at least £10k below asking (and at most 95% of it once listed over 50 days), bottom
+ * at least £20k below asking, and never more than 10% below asking unless the £20k rule
+ * needs it (homes under £200k).
+ */
+export function offerLimits(askingPrice: number, daysOnMarket: number | null, step: number): OfferLimits {
+  const down = (n: number) => Math.floor(n / step) * step
+  const stale = staleListingCap(askingPrice, daysOnMarket, step)
+  const maxHigh = Math.min(down(askingPrice - MIN_POUNDS_BELOW_ASKING_HIGH), stale ?? Infinity)
+  const maxLow = Math.min(down(askingPrice - MIN_POUNDS_BELOW_ASKING_LOW), maxHigh - step)
+  const tenPercentFloor = Math.ceil((askingPrice * (1 - MAX_PERCENT_BELOW_ASKING / 100)) / step) * step
+  return { maxHigh, maxLow, floor: Math.min(tenPercentFloor, maxLow) }
+}
+
 /** The most the range's top may be, or null when there's no cap (the listing isn't stale). */
 export function staleListingCap(askingPrice: number, daysOnMarket: number | null, step: number): number | null {
   if (daysOnMarket === null || daysOnMarket <= STALE_LISTING_DAYS) return null
@@ -74,21 +103,21 @@ export function recommendedOfferRange(input: RecommendedOfferInput): Recommended
 
   points = Math.max(0, Math.min(points, MAX_DISCOUNT_POINTS))
 
-  // Capped so even the low end is never more than MAX_PERCENT_BELOW_ASKING below asking.
-  const cap = staleListingCap(input.askingPrice, input.daysOnMarket, ROUND_TO)
+  const limits = offerLimits(input.askingPrice, input.daysOnMarket, ROUND_TO)
   // A stale listing's top is at least STALE_LISTING_MIN_PERCENT_BELOW under asking; the low
-  // end keeps its usual spread below that.
+  // end keeps its usual spread below that. Never more than MAX_PERCENT_BELOW_ASKING below.
+  const stale = staleListingCap(input.askingPrice, input.daysOnMarket, ROUND_TO) !== null
   const highDiscountPercent = Math.max(
     Math.min(points, MAX_PERCENT_BELOW_ASKING - RANGE_SPREAD_POINTS),
-    cap === null ? 0 : STALE_LISTING_MIN_PERCENT_BELOW
+    stale ? STALE_LISTING_MIN_PERCENT_BELOW : 0
   )
   const lowDiscountPercent = Math.min(Math.max(points, highDiscountPercent) + RANGE_SPREAD_POINTS, MAX_PERCENT_BELOW_ASKING)
 
-  const rounded = roundToNearest(input.askingPrice * (1 - highDiscountPercent / 100), ROUND_TO)
-  const high = cap === null ? rounded : Math.min(rounded, cap)
-  // Round the floor up, never down: rounding to the nearest £5k mustn't take it past the cap.
-  const floor = Math.ceil((input.askingPrice * (1 - MAX_PERCENT_BELOW_ASKING / 100)) / ROUND_TO) * ROUND_TO
-  const low = Math.max(roundToNearest(input.askingPrice * (1 - lowDiscountPercent / 100), ROUND_TO), Math.min(floor, high))
+  const high = Math.min(roundToNearest(input.askingPrice * (1 - highDiscountPercent / 100), ROUND_TO), limits.maxHigh)
+  const low = Math.min(
+    Math.max(roundToNearest(input.askingPrice * (1 - lowDiscountPercent / 100), ROUND_TO), Math.min(limits.floor, high)),
+    limits.maxLow
+  )
 
   return {
     low,

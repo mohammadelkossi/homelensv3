@@ -1,6 +1,6 @@
 // Sanity checks on the model's recommended offer. If any fail, the report falls
 // back to the rule-based offer rather than show a price we can't stand behind.
-import { MAX_PERCENT_BELOW_ASKING, staleListingCap } from "@/lib/pricing/recommended-offer"
+import { MAX_PERCENT_BELOW_ASKING, offerLimits } from "@/lib/pricing/recommended-offer"
 
 export type AiOffer = { low: number; high: number; opening: number; reasons: string[] }
 
@@ -14,7 +14,6 @@ export type OfferEvidence = {
   daysOnMarket?: number | null
 }
 
-const MIN_SHARE_OF_ASKING = 1 - MAX_PERCENT_BELOW_ASKING / 100
 // The range's midpoint must sit this close to what local £/m² implies for this home.
 const COMPARABLE_BAND: [number, number] = [0.7, 1.3]
 
@@ -37,16 +36,20 @@ export function impliedValue(evidence: OfferEvidence): number | null {
 /** Rounds the offer to £1,000 and returns it if it passes every check, else null. */
 export function validateOffer(raw: AiOffer, evidence: OfferEvidence): AiOffer | null {
   const asking = evidence.askingPrice
-  const floor = asking * MIN_SHARE_OF_ASKING
-  // The model must respect the floor itself; we only stop £1,000 rounding nudging it under.
-  if (raw.low < floor - 500) return null
-  const atLeastFloor = (n: number) => Math.max(roundToThousand(n), Math.ceil(floor / 1000) * 1000)
-  // A stale listing's top is capped below asking: pull the model's top (and opening) down to it.
-  const cap = staleListingCap(asking, evidence.daysOnMarket ?? null, 1000)
-  const capped = (n: number) => (cap === null ? n : Math.min(n, cap))
-  const low = atLeastFloor(raw.low)
-  const high = capped(roundToThousand(raw.high))
-  const opening = capped(atLeastFloor(raw.opening))
+  // An offer above asking means the model misread the evidence: don't trust any of it.
+  if (raw.high > asking) return null
+  const limits = offerLimits(asking, evidence.daysOnMarket ?? null, 1000)
+  // The model must respect the floor itself (the exact one, before rounding); we only stop
+  // £1,000 rounding nudging it under.
+  const exactFloor = Math.min(asking * (1 - MAX_PERCENT_BELOW_ASKING / 100), limits.maxLow)
+  if (raw.low < exactFloor - 500) return null
+  // Then hold it to the hard caps: pull the top, bottom and opening down to them if needed.
+  const low = Math.min(Math.max(roundToThousand(raw.low), limits.floor), limits.maxLow)
+  const high = Math.min(roundToThousand(raw.high), limits.maxHigh)
+  const opening = Math.min(Math.max(roundToThousand(raw.opening), limits.floor), high)
+  // An opening outside the model's own range is incoherent: reject rather than repair it.
+  const [rawLow, rawHigh, rawOpening] = [raw.low, raw.high, raw.opening].map(roundToThousand)
+  if (rawOpening < rawLow || rawOpening > rawHigh) return null
 
   if (![low, high, opening].every((n) => Number.isFinite(n) && n > 0)) return null
   if (!(low < high && low <= opening && opening <= high)) return null

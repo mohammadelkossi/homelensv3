@@ -56,8 +56,10 @@ const SHARED_RULES = `- Use only facts and numbers that appear in the findings. 
 const OFFER_PROMPT = `You advise a UK home buyer, using ONLY the findings JSON you are given. Produce a recommended offer: what this buyer should offer.
 - "low" and "high" in whole pounds: the range a well-informed buyer could reasonably agree at. "opening": the first offer to make, within the range.
 - Base it on the evidence: recent nearby sales and their £/m² applied to this home's floor area, competing listings for sale, the area averages, how long it's been on the market, the area sales trend and supply and demand, and the home's own sale history.
-- The range must be at or below the asking price, and its low end no more than 10% below it (at least 90% of the asking price). Don't discount for the sake of it: if the evidence supports the asking price, say so with a narrow range near it.
-- If it has been on the market for more than 50 days, the top of the range ("high") must be at least 5% below the asking price (at most 95% of it).
+- However strong the home, "high" must be at least £10,000 below the asking price, and "low" at least £20,000 below it. So the best case for a £550,000 asking price is £530,000–£540,000.
+- "low" must also be no more than 10% below the asking price (at least 90% of it), unless that would put it less than £20,000 below; then the £20,000 rule wins.
+- Don't discount for the sake of it: if the evidence supports the asking price, use the narrowest range the rules above allow.
+- If it has been on the market for more than 50 days, "high" must also be at least 5% below the asking price (at most 95% of it).
 - "reasons": 2–3 short phrases (max 10 words each) naming the specific evidence, e.g. "168 days on the market" or "Nearby semis sold at £3,190–£3,570/m²".
 
 Rules:

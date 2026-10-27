@@ -28,14 +28,28 @@ describe("validateOffer", () => {
       reasons: ["167 days on the market"],
     })
   })
-  it("falls back when capping a stale listing's top leaves no range", () => {
-    expect(validateOffer(offer(332_000, 345_000, 335_000), { ...evidence, daysOnMarket: 60 })).toBeNull()
+  it("pulls a stale listing's bottom under its capped top", () => {
+    // £349k asking, 60 days: top at most £331k (95%), so the bottom drops to £329k.
+    expect(validateOffer(offer(332_000, 345_000, 335_000), { ...evidence, daysOnMarket: 60 })).toMatchObject({
+      low: 329_000,
+      high: 331_000,
+      opening: 331_000,
+    })
   })
-  it("leaves the top alone at 50 days or fewer", () => {
-    expect(validateOffer(offer(320_000, 345_000, 340_000), { ...evidence, daysOnMarket: 50 })?.high).toBe(345_000)
+  it("at 50 days or fewer, caps the top at £10k below asking, not 95%", () => {
+    expect(validateOffer(offer(320_000, 345_000, 340_000), { ...evidence, daysOnMarket: 50 })?.high).toBe(339_000)
+  })
+  it("however strong the home, keeps the top £10k and the bottom £20k below asking", () => {
+    const strong = { ...evidence, askingPrice: 550_000, comparablePricesPerSqm: [5800, 5900, 6000] }
+    expect(validateOffer(offer(545_000, 550_000, 548_000), strong)).toMatchObject({ low: 530_000, high: 540_000, opening: 540_000 })
+  })
+  it("lets the £20k rule go past the 10% floor on cheaper homes", () => {
+    const cheap = { ...evidence, askingPrice: 150_000, comparablePricesPerSqm: [1500, 1550, 1600] }
+    // 10% below £150k is £135k, but the bottom must sit £20k below: £130k is allowed.
+    expect(validateOffer(offer(130_000, 140_000, 132_000), cheap)).toMatchObject({ low: 130_000, high: 140_000 })
   })
   it("accepts a sensible range and rounds it to £1,000", () => {
-    expect(validateOffer(offer(318_400, 332_600, 320_200), evidence)).toMatchObject({ low: 318_000, high: 333_000, opening: 320_000 })
+    expect(validateOffer(offer(318_400, 328_600, 320_200), evidence)).toMatchObject({ low: 318_000, high: 329_000, opening: 320_000 })
   })
   it("rejects a range above the asking price or more than 10% below it", () => {
     expect(validateOffer(offer(330_000, 355_000, 340_000), evidence)).toBeNull()
