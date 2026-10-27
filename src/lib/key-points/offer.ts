@@ -1,6 +1,6 @@
 // Sanity checks on the model's recommended offer. If any fail, the report falls
 // back to the rule-based offer rather than show a price we can't stand behind.
-import { MAX_PERCENT_BELOW_ASKING } from "@/lib/pricing/recommended-offer"
+import { MAX_PERCENT_BELOW_ASKING, staleListingCap } from "@/lib/pricing/recommended-offer"
 
 export type AiOffer = { low: number; high: number; opening: number; reasons: string[] }
 
@@ -10,6 +10,8 @@ export type OfferEvidence = {
   /** £/m² of recent nearby sales of the same type. */
   comparablePricesPerSqm: number[]
   areaPricePerSqm: number | null
+  /** Over STALE_LISTING_DAYS caps the range's top below the asking price. */
+  daysOnMarket?: number | null
 }
 
 const MIN_SHARE_OF_ASKING = 1 - MAX_PERCENT_BELOW_ASKING / 100
@@ -39,9 +41,12 @@ export function validateOffer(raw: AiOffer, evidence: OfferEvidence): AiOffer | 
   // The model must respect the floor itself; we only stop £1,000 rounding nudging it under.
   if (raw.low < floor - 500) return null
   const atLeastFloor = (n: number) => Math.max(roundToThousand(n), Math.ceil(floor / 1000) * 1000)
+  // A stale listing's top is capped below asking: pull the model's top (and opening) down to it.
+  const cap = staleListingCap(asking, evidence.daysOnMarket ?? null, 1000)
+  const capped = (n: number) => (cap === null ? n : Math.min(n, cap))
   const low = atLeastFloor(raw.low)
-  const high = roundToThousand(raw.high)
-  const opening = atLeastFloor(raw.opening)
+  const high = capped(roundToThousand(raw.high))
+  const opening = capped(atLeastFloor(raw.opening))
 
   if (![low, high, opening].every((n) => Number.isFinite(n) && n > 0)) return null
   if (!(low < high && low <= opening && opening <= high)) return null

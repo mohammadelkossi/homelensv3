@@ -8,6 +8,41 @@ import {
 } from "./recommended-offer"
 
 describe("recommendedOfferRange", () => {
+  it("caps the top at 95% of asking once a home has been on the market over 50 days", () => {
+    const result = recommendedOfferRange({
+      askingPrice: 500_000,
+      daysOnMarket: 60,
+      premiumOverDistrictPercent: 0,
+      sellersGainPercent: 5,
+      recentSalesCount: 12,
+    })
+    expect(result.high).toBe(475_000)
+    expect(result.low).toBeLessThan(result.high)
+    expect(result.low).toBeGreaterThanOrEqual(450_000)
+  })
+
+  it("rounds the stale-listing cap down, never over 95% of asking", () => {
+    const result = recommendedOfferRange({
+      askingPrice: 510_000,
+      daysOnMarket: 51,
+      premiumOverDistrictPercent: 0,
+      sellersGainPercent: 5,
+      recentSalesCount: 12,
+    })
+    expect(result.high).toBeLessThanOrEqual(510_000 * 0.95)
+  })
+
+  it("doesn't cap a home on the market for exactly 50 days", () => {
+    const result = recommendedOfferRange({
+      askingPrice: 500_000,
+      daysOnMarket: 50,
+      premiumOverDistrictPercent: 0,
+      sellersGainPercent: 5,
+      recentSalesCount: 12,
+    })
+    expect(result.high).toBe(500_000)
+  })
+
   it("widens the discount when multiple negative signals stack up", () => {
     const result = recommendedOfferRange({
       askingPrice: 735_000,

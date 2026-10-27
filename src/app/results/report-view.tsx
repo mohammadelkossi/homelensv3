@@ -1962,7 +1962,7 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
   })()
   const backgroundDataLoaded =
     mounted && !riskDataLoading && !nearbyLoading && !districtLoading && !supplyDemandLoading && !pricePerSqmLoading
-  const { keyPoints: displayedKeyPoints, offer: aiOffer, loading: keyPointsLoading } = useAiKeyPoints(
+  const { keyPoints: displayedKeyPoints, offer: aiOffer, loading: keyPointsLoading, offerLoading } = useAiKeyPoints(
     keyPointFindings,
     backgroundDataLoaded,
     searchParams.get('savedReportId') ?? propertyData.rightmoveUrl ?? null,
@@ -2028,7 +2028,7 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
             averagePriceByYear={averagePriceByYear}
             noGainFallback={showRankingNextToOffer ? rankingChartBlock : undefined}
             aiOffer={aiOffer}
-            offerLoading={keyPointsLoading}
+            offerLoading={offerLoading}
           />
 
           {neighbourDistricts.length > 0 && neighbourDistricts.some((d) => d.yearly.length > 0) && (
@@ -2589,6 +2589,11 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
               Sources: HM Land Registry price paid data, EPC register, Rightmove listing data, Environment Agency flood
               mapping, planning.data.gov.uk, data.police.uk, Ofcom broadband coverage, DEFRA air quality and noise
               mapping. © {asOf.getFullYear()} HomeLens.
+            </p>
+            <p className="m-0 mt-3 max-w-[560px]">
+              While every effort has been made to ensure this report is accurate, it relies on government and
+              third-party data that can contain occasional errors or gaps. As a result, a small number of data points
+              may be inaccurate, which we can&apos;t always avoid. Please check anything important before relying on it.
             </p>
           </div>
           <div className="sm:col-span-3 flex sm:justify-end">

@@ -3,6 +3,7 @@
 import { useState } from "react"
 import type { KeyPoints } from "@/lib/rules-engine"
 import { Locked } from "./locked"
+import { LoadingRing } from "./loading-ring"
 
 const DISPLAY_FONT = "var(--font-report-display)"
 const BODY_FONT = "var(--font-report-body)"
@@ -40,9 +41,12 @@ export function KeyPointsTabs({ keyPoints, loading = false }: { keyPoints: KeyPo
       <Locked>
       {loading ? (
         <div aria-live="polite">
-          <p className="mb-4 text-[12px]" style={{ color: "#6B6B70" }}>
-            Writing the key points for this home…
-          </p>
+          <div className="mb-4 flex items-center gap-2.5">
+            <LoadingRing size={18} />
+            <p className="m-0 text-[12px]" style={{ color: "#6B6B70" }}>
+              Writing the key points for this home…
+            </p>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-[31px]" aria-hidden>
             {[0, 1, 2].map((i) => (
               <div key={i} className="animate-pulse">

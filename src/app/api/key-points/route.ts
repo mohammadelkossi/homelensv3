@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import OpenAI from "openai"
-import { generateReportInsights, MODEL } from "@/lib/key-points/generate"
+import { generateKeyPoints, generateOffer, MODEL } from "@/lib/key-points/generate"
 import type { ReportFindings } from "@/lib/key-points/findings"
 
 export const maxDuration = 60
@@ -10,7 +10,8 @@ export const maxDuration = 60
 const MAX_BODY_BYTES = 30_000
 
 export async function POST(request: NextRequest) {
-  // Writes the report's recommended offer and key points. Each call costs money, so
+  // Writes the report's recommended offer ("part": "offer") or its key points
+  // ("part": "points"); the report asks for both at once. Each call costs money, so
   // only signed-in users (who can generate reports) can use it.
   const cookieStore = await cookies()
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -24,8 +25,11 @@ export async function POST(request: NextRequest) {
   const raw = await request.text()
   if (raw.length > MAX_BODY_BYTES) return NextResponse.json({ error: "Findings too large" }, { status: 413 })
   let findings: ReportFindings
+  let part: "offer" | "points"
   try {
-    findings = (JSON.parse(raw) as { findings: ReportFindings }).findings
+    const body = JSON.parse(raw) as { findings: ReportFindings; part?: unknown }
+    findings = body.findings
+    part = body.part === "offer" ? "offer" : "points"
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
@@ -34,13 +38,18 @@ export async function POST(request: NextRequest) {
   }
   if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "Not configured" }, { status: 503 })
 
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   try {
-    const { keyPoints, offer, dropped } = await generateReportInsights(new OpenAI({ apiKey: process.env.OPENAI_API_KEY }), findings)
+    if (part === "offer") {
+      const offer = await generateOffer(openai, findings)
+      if (!offer) console.warn("[key-points] offer failed its checks; the report will use the rule-based offer")
+      return NextResponse.json({ offer, model: MODEL })
+    }
+    const { keyPoints, dropped } = await generateKeyPoints(openai, findings)
     if (dropped > 0) console.warn(`[key-points] dropped ${dropped} ungrounded point(s)`)
-    if (!offer) console.warn("[key-points] offer failed its checks; the report will use the rule-based offer")
-    return NextResponse.json({ keyPoints, offer, model: MODEL })
+    return NextResponse.json({ keyPoints, model: MODEL })
   } catch (error) {
-    console.error("[key-points] generation failed:", error instanceof Error ? error.message : error)
+    console.error(`[key-points] ${part} generation failed:`, error instanceof Error ? error.message : error)
     return NextResponse.json({ error: "Generation failed" }, { status: 502 })
   }
 }

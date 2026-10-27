@@ -19,6 +19,21 @@ describe("impliedValue", () => {
 })
 
 describe("validateOffer", () => {
+  it("pulls the top and opening down to 95% of asking for a listing over 50 days", () => {
+    const stale = { ...evidence, daysOnMarket: 60 }
+    expect(validateOffer(offer(320_000, 345_000, 340_000), stale)).toEqual({
+      low: 320_000,
+      high: 331_000,
+      opening: 331_000,
+      reasons: ["167 days on the market"],
+    })
+  })
+  it("falls back when capping a stale listing's top leaves no range", () => {
+    expect(validateOffer(offer(332_000, 345_000, 335_000), { ...evidence, daysOnMarket: 60 })).toBeNull()
+  })
+  it("leaves the top alone at 50 days or fewer", () => {
+    expect(validateOffer(offer(320_000, 345_000, 340_000), { ...evidence, daysOnMarket: 50 })?.high).toBe(345_000)
+  })
   it("accepts a sensible range and rounds it to £1,000", () => {
     expect(validateOffer(offer(318_400, 332_600, 320_200), evidence)).toMatchObject({ low: 318_000, high: 333_000, opening: 320_000 })
   })

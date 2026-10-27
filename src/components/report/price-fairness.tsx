@@ -7,6 +7,7 @@ import {
 } from "@/lib/pricing/recommended-offer";
 import type { AiOffer } from "@/lib/key-points/offer";
 import { Locked } from "./locked"
+import { LoadingRing } from "./loading-ring"
 
 const DISPLAY_FONT = "var(--font-report-display)";
 
@@ -187,13 +188,12 @@ export function PriceFairness(props: PriceFairnessProps) {
               <div className="text-[12px]" style={{ color: "#6B6B70" }}>
                 Recommended offer
               </div>
-              <div
-                className="mt-2 h-[48px] w-4/5 animate-pulse sm:h-[72px]"
-                style={{ backgroundColor: "#EFEFF1" }}
-              />
-              <p className="mt-2.5 text-[15px]" style={{ color: "#6B6B70" }}>
-                Working out a fair offer from local sales and market signals…
-              </p>
+              <div className="mt-3 flex items-center gap-4">
+                <LoadingRing size={44} />
+                <p className="m-0 text-[15px]" style={{ color: "#6B6B70" }}>
+                  Working out a fair offer from local sales and market signals…
+                </p>
+              </div>
             </div>
           ) : (
             <div>

@@ -8,6 +8,17 @@ const RANGE_SPREAD_POINTS = 4
 const MAX_DISCOUNT_POINTS = 16
 /** The offer is never more than this % below the asking price (the range's low end included). */
 export const MAX_PERCENT_BELOW_ASKING = 10
+/** On the market longer than this many days: the top of the range is capped below asking. */
+export const STALE_LISTING_DAYS = 50
+/** For a stale listing, the range's top is at least this % below the asking price. */
+export const STALE_LISTING_MIN_PERCENT_BELOW = 5
+
+/** The most the range's top may be, or null when there's no cap (the listing isn't stale). */
+export function staleListingCap(askingPrice: number, daysOnMarket: number | null, step: number): number | null {
+  if (daysOnMarket === null || daysOnMarket <= STALE_LISTING_DAYS) return null
+  // Rounded down, so rounding can never lift the top over the cap.
+  return Math.floor((askingPrice * (1 - STALE_LISTING_MIN_PERCENT_BELOW / 100)) / step) * step
+}
 
 const DAYS_ON_MARKET_MODERATE = 60
 const DAYS_ON_MARKET_LONG = 120
@@ -64,10 +75,17 @@ export function recommendedOfferRange(input: RecommendedOfferInput): Recommended
   points = Math.max(0, Math.min(points, MAX_DISCOUNT_POINTS))
 
   // Capped so even the low end is never more than MAX_PERCENT_BELOW_ASKING below asking.
-  const lowDiscountPercent = Math.min(points + RANGE_SPREAD_POINTS, MAX_PERCENT_BELOW_ASKING)
-  const highDiscountPercent = Math.min(points, MAX_PERCENT_BELOW_ASKING - RANGE_SPREAD_POINTS)
+  const cap = staleListingCap(input.askingPrice, input.daysOnMarket, ROUND_TO)
+  // A stale listing's top is at least STALE_LISTING_MIN_PERCENT_BELOW under asking; the low
+  // end keeps its usual spread below that.
+  const highDiscountPercent = Math.max(
+    Math.min(points, MAX_PERCENT_BELOW_ASKING - RANGE_SPREAD_POINTS),
+    cap === null ? 0 : STALE_LISTING_MIN_PERCENT_BELOW
+  )
+  const lowDiscountPercent = Math.min(Math.max(points, highDiscountPercent) + RANGE_SPREAD_POINTS, MAX_PERCENT_BELOW_ASKING)
 
-  const high = roundToNearest(input.askingPrice * (1 - highDiscountPercent / 100), ROUND_TO)
+  const rounded = roundToNearest(input.askingPrice * (1 - highDiscountPercent / 100), ROUND_TO)
+  const high = cap === null ? rounded : Math.min(rounded, cap)
   // Round the floor up, never down: rounding to the nearest £5k mustn't take it past the cap.
   const floor = Math.ceil((input.askingPrice * (1 - MAX_PERCENT_BELOW_ASKING / 100)) / ROUND_TO) * ROUND_TO
   const low = Math.max(roundToNearest(input.askingPrice * (1 - lowDiscountPercent / 100), ROUND_TO), Math.min(floor, high))
