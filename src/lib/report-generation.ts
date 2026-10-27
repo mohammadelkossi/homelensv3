@@ -3,7 +3,7 @@ export const PENDING_REPORT_STORAGE_KEY = "homelens_pending_report"
 /** Legacy allowance for accounts created before the pricing cutoff. */
 export const GRANDFATHERED_FREE_PROPERTY_LIMIT = 1
 
-/** Stripe profile status for £21 lifetime (one-time) purchasers. */
+/** Stripe profile status for lifetime (one-time) purchasers. */
 export const STRIPE_PRO_STATUS_LIFETIME = "lifetime"
 
 export type UserProfileLimit = {
@@ -93,11 +93,44 @@ export type PendingReportPayload = {
   locationLabel: string
 }
 
+// Mirrors the report's own §01–§05 section numbering, so "building your report"
+// reads as the same five things the report itself is structured around.
 export const REPORT_GENERATION_STAGES = [
-  { label: "Fetching listing data...", startSec: 0, endSec: 8 },
-  { label: "Analysing price history...", startSec: 8, endSec: 15 },
-  { label: "Scoring against your preferences...", startSec: 15, endSec: 20 },
-  { label: "Almost there...", startSec: 20, endSec: Infinity },
+  {
+    number: "01",
+    label: "Price",
+    description: "Checking the asking price against sold prices nearby…",
+    startSec: 0,
+    endSec: 5,
+  },
+  {
+    number: "02",
+    label: "Market",
+    description: "Looking at how fast homes are selling in the area…",
+    startSec: 5,
+    endSec: 10,
+  },
+  {
+    number: "03",
+    label: "Risks",
+    description: "Checking planning restrictions and flood risk…",
+    startSec: 10,
+    endSec: 15,
+  },
+  {
+    number: "04",
+    label: "Nearby",
+    description: "Finding nearby schools, stations and green space…",
+    startSec: 15,
+    endSec: 19,
+  },
+  {
+    number: "05",
+    label: "Must-haves",
+    description: "Scoring the property against your preferences…",
+    startSec: 19,
+    endSec: Infinity,
+  },
 ] as const
 
 export function getActiveStageIndex(elapsedSec: number): number {
@@ -110,10 +143,11 @@ export function getActiveStageIndex(elapsedSec: number): number {
 /** Progress 0–95 from elapsed time; hits 100 only when caller passes complete=true */
 export function getReportProgressPercent(elapsedSec: number, complete = false): number {
   if (complete) return 100
-  if (elapsedSec < 8) return (elapsedSec / 8) * 25
-  if (elapsedSec < 15) return 25 + ((elapsedSec - 8) / 7) * 30
-  if (elapsedSec < 20) return 55 + ((elapsedSec - 15) / 5) * 25
-  return Math.min(95, 80 + (elapsedSec - 20) * 0.75)
+  if (elapsedSec < 5) return (elapsedSec / 5) * 20
+  if (elapsedSec < 10) return 20 + ((elapsedSec - 5) / 5) * 20
+  if (elapsedSec < 15) return 40 + ((elapsedSec - 10) / 5) * 20
+  if (elapsedSec < 19) return 60 + ((elapsedSec - 15) / 4) * 20
+  return Math.min(95, 80 + (elapsedSec - 19) * 0.75)
 }
 
 export function buildResultsSearchParams(
@@ -125,14 +159,6 @@ export function buildResultsSearchParams(
     if (key === "priceHistory" && val !== null) {
       params.append(key, JSON.stringify(val))
     } else if (key === "nearbyPlaces" && val !== null) {
-      params.append(key, JSON.stringify(val))
-    } else if (key === "planningConstraints" && val !== null) {
-      params.append(key, JSON.stringify(val))
-    } else if (key === "crimeSummary" && val !== null) {
-      params.append(key, JSON.stringify(val))
-    } else if (key === "broadbandCoverage" && val !== null) {
-      params.append(key, JSON.stringify(val))
-    } else if (key === "environmentData" && val !== null) {
       params.append(key, JSON.stringify(val))
     } else if (key === "averagePriceByYear" && val !== null) {
       params.append(key, JSON.stringify(val))

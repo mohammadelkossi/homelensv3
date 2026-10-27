@@ -5,7 +5,6 @@ import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Button } from "../../components/ui/button"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../components/ui/tooltip"
 import { ArrowRight, Info } from "lucide-react"
 import { useState, useEffect, type ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
@@ -18,6 +17,7 @@ import {
   hasFreeReportLimitReached,
   type PendingReportPayload,
 } from "@/lib/report-generation"
+import { interBody, interTight } from "@/app/results/report-fonts"
 
 export default function PreferencesPage() {
   const { openUpgradeLimit } = useLoginPopup()
@@ -37,7 +37,6 @@ export default function PreferencesPage() {
   const initialText = "https://www.rightmove.co.uk/properties/..."
   const [value, setValue] = useState<string>(initialText)
   const [showPreferences, setShowPreferences] = useState<boolean>(false)
-  const [location, setLocation] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [isScrolled, setIsScrolled] = useState(false)
 
@@ -63,7 +62,6 @@ export default function PreferencesPage() {
   const [sizeSlider, setSizeSlider] = useState(50)
   const [gardenSlider, setGardenSlider] = useState(50)
   const [parkingSlider, setParkingSlider] = useState(50)
-  const [locationSlider, setLocationSlider] = useState(50)
   const [garageSlider, setGarageSlider] = useState(50)
   
   const router = useRouter()
@@ -98,7 +96,7 @@ export default function PreferencesPage() {
 
     const payload: PendingReportPayload = {
       url: value.trim(),
-      postcode: location.trim() || null,
+      postcode: null,
       preferences: {
         bedrooms: bedroomsSlider,
         bathrooms: bathroomsSlider,
@@ -106,7 +104,7 @@ export default function PreferencesPage() {
         size: sizeSlider,
         garden: gardenSlider,
         parking: parkingSlider,
-        location: locationSlider,
+        location: 50,
         garage: garageSlider,
       },
       bedrooms,
@@ -119,16 +117,16 @@ export default function PreferencesPage() {
       sizeSlider,
       gardenSlider,
       parkingSlider,
-      locationSlider,
+      locationSlider: 50,
       garageSlider,
-      locationLabel: location,
+      locationLabel: '',
     }
 
     sessionStorage.setItem(PENDING_REPORT_STORAGE_KEY, JSON.stringify(payload))
     router.push("/generating")
   }
   return (
-    <div className="min-h-screen bg-white" style={{ backgroundColor: '#FFFFFF' }}>
+    <div className="min-h-screen bg-white" style={{ backgroundColor: '#FBFAF7' }}>
       <Navbar isScrolled={isScrolled} />
       <div className="container mx-auto px-4 sm:px-6 min-h-[70vh] flex flex-col items-center justify-center gap-6">
         <div
@@ -192,9 +190,12 @@ export default function PreferencesPage() {
       </div>
 
       {showPreferences && (
-        <section className="container mx-auto px-4 sm:px-6 py-8 md:py-12" style={{ marginTop: '-160px' }}>
+        <section
+          className={`container mx-auto px-4 sm:px-6 py-8 md:py-12 ${interBody.variable} ${interTight.variable}`}
+          style={{ marginTop: '-160px', fontFamily: 'var(--font-report-body)' }}
+        >
           <div className="border border-gray-300 rounded-lg p-4 sm:p-6 md:p-8 mx-auto w-full max-w-full md:max-w-[85%] md:w-[85%]" style={{ borderRadius: '0.505rem', border: '1px solid #d1d5db', backgroundColor: '#CFDEE7' }}>
-            <h2 className="text-xl md:text-2xl font-semibold mb-6 text-left px-1" style={{ color: '#000000' }}>
+            <h2 className="text-xl md:text-2xl font-semibold mb-6 text-left px-1" style={{ color: '#000000', fontFamily: 'var(--font-report-display)' }}>
               Set your preferences
             </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-[1.092rem] max-w-full lg:max-w-[94.248%] mx-auto">
@@ -363,40 +364,7 @@ export default function PreferencesPage() {
             </div>
           </div>
 
-          <div className="mt-6 md:mt-[30px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-[1.092rem] max-w-full lg:max-w-[94.248%] mx-auto">
-            <div>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <input
-                      type="text"
-                      placeholder="Location"
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
-                      className="w-full h-10 bg-white text-black border border-black rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                      style={{ color: '#000000', borderRadius: '0.5rem', textIndent: '0.5rem', fontWeight: '700', paddingRight: '0.75rem', boxSizing: 'border-box', borderWidth: '1px' }}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Enter your ideal post code</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <label className="mt-4 block text-black" style={{ color: '#000000', fontSize: '0.86821875rem', paddingLeft: '0', paddingRight: '0' }}>
-                Preference strength: {locationSlider}
-              </label>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={locationSlider}
-                onChange={(event) => setLocationSlider(Number(event.target.value))}
-                className="w-full accent-black"
-                style={{ accentColor: '#0A369D', paddingLeft: '0', paddingRight: '0', marginLeft: '0', marginRight: '0' }}
-              />
-            </div>
-
+          <div className="mt-6 md:mt-[30px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-[1.092rem] max-w-full lg:max-w-[94.248%] mx-auto">
             <div>
               <div className="flex items-center px-3 py-2 font-bold text-black h-10" style={{ color: '#000000', fontWeight: '700' }}>
                 Garden?

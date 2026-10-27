@@ -152,19 +152,22 @@ export async function fetchEnvironmentData(latitude: number, longitude: number):
 
 export const REPORT_ENVIRONMENT_DATA_STORAGE_KEY = "homelens_report_environment_data";
 
-export function readStoredEnvironmentData(): EnvironmentData | null {
+// `key` scopes the cache to one property (see useRisksRestrictions) — without it, the first
+// report generated in a tab would cache its environment data forever and every later report in
+// that tab (almost always a different property) would silently reuse it instead of fetching.
+export function readStoredEnvironmentData(key: string): EnvironmentData | null {
   if (typeof window === "undefined") return null;
-  const raw = sessionStorage.getItem(REPORT_ENVIRONMENT_DATA_STORAGE_KEY);
+  const raw = sessionStorage.getItem(`${REPORT_ENVIRONMENT_DATA_STORAGE_KEY}:${key}`);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as EnvironmentData;
   } catch {
-    sessionStorage.removeItem(REPORT_ENVIRONMENT_DATA_STORAGE_KEY);
+    sessionStorage.removeItem(`${REPORT_ENVIRONMENT_DATA_STORAGE_KEY}:${key}`);
     return null;
   }
 }
 
-export function storeEnvironmentData(data: EnvironmentData): void {
+export function storeEnvironmentData(key: string, data: EnvironmentData): void {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(REPORT_ENVIRONMENT_DATA_STORAGE_KEY, JSON.stringify(data));
+  sessionStorage.setItem(`${REPORT_ENVIRONMENT_DATA_STORAGE_KEY}:${key}`, JSON.stringify(data));
 }

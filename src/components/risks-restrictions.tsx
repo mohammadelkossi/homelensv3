@@ -1,7 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Landmark, ShieldAlert, Building2, TreeDeciduous, Trees, Droplets, Siren, Wifi, Wind, Volume2 } from "lucide-react"
+import type { ReactNode } from "react"
 import type { PlanningConstraint } from "@/lib/planning-constraints"
 import type { CrimeSummary } from "@/lib/crime-data"
 import type { BroadbandCoverage } from "@/lib/broadband-coverage"
@@ -19,13 +18,49 @@ interface RisksRestrictionsProps {
   airQuality: AirQuality | null
   noiseLevels: NoiseLevels
   loading?: boolean
+  /** Link single constraints to their council document. Off for frozen reports, where links can go stale. */
+  linkDocuments?: boolean
 }
 
 // Long-standing UK Air Quality Standards Regulations annual mean objectives (µg/m³).
 const AQ_OBJECTIVES = { no2: 40, pm25: 20, pm10: 40 }
+const NOISE_FLAG_DB = 55
+// Flat threshold on "reports within ~1 mile, latest month" — simpler and far more
+// reliable than comparing against a modelled per-force baseline: building a fair
+// baseline needs sampling real addresses across every force (data.police.uk
+// anonymises crime locations to a sparse set of "safe points", so an arbitrary
+// computed sample point frequently misses nearby real crime and reads falsely
+// low — confirmed this even for central Manchester). A flat count threshold
+// needs no external baseline data at all and avoids that whole failure mode.
+const CRIME_CLEAR_BELOW = 25
+const CRIME_CHECK_AT_OR_ABOVE = 100
 
-function aqBadgeColor(value: number, objective: number): string {
-  return value >= objective ? "bg-red-500/10 text-red-700" : "bg-emerald-500/10 text-emerald-700"
+type Status = "clear" | "check" | "nothing_found"
+
+const STATUS_COPY: Record<Status, { dot: string; color: string; label: string }> = {
+  clear: { dot: "●", color: "#15803D", label: "Clear" },
+  check: { dot: "●", color: "#C2410C", label: "Check" },
+  nothing_found: { dot: "○", color: "#6B6B70", label: "Nothing found" },
+}
+
+type Row = {
+  key: string
+  check: string
+  finding: ReactNode
+  meaning: string
+  status: Status
+}
+
+function constraintFinding(items: PlanningConstraint[], emptyLabel: string, linkDocuments: boolean): ReactNode {
+  if (items.length === 0) return emptyLabel
+  if (linkDocuments && items.length === 1 && items[0].documentUrl) {
+    return (
+      <a href={items[0].documentUrl} target="_blank" rel="noreferrer" className="text-[#0A369D] no-underline hover:underline">
+        {items[0].name} ↗
+      </a>
+    )
+  }
+  return joinConstraintNames(items)
 }
 
 function formatMonth(month: string): string {
@@ -34,275 +69,248 @@ function formatMonth(month: string): string {
   return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
 }
 
-type ConstraintTile = {
-  key: string
-  label: string
-  icon: typeof Landmark
-  items: PlanningConstraint[]
-  /** Polygon-based constraints assert the property is inside the boundary; proximity-based ones only assert nearby presence. */
-  proximityOnly?: boolean
-  /** Shown instead of the generic "not found in available data" when items is empty. */
-  emptyLabel?: string
-  /** True when an empty result is itself a meaningful, confidently-good signal (e.g. flood Zone 1), not just a data gap. */
-  emptyIsPositive?: boolean
+function joinConstraintNames(items: PlanningConstraint[]): string {
+  return items.map((item) => item.name).join(", ")
 }
 
-export function RisksRestrictions({
-  conservationAreas,
-  article4Directions,
-  listedBuildingsNearby,
-  treePreservationNearby,
-  greenBelt,
-  floodRiskZones,
-  crimeSummary,
-  broadbandCoverage,
-  airQuality,
-  noiseLevels,
-  loading = false,
-}: RisksRestrictionsProps) {
-  const tiles: ConstraintTile[] = [
-    {
-      key: "flood",
-      label: "Flood Risk",
-      icon: Droplets,
-      items: floodRiskZones,
-      emptyLabel: "Zone 1 (low risk) — not in a mapped flood zone",
-      emptyIsPositive: true,
-    },
-    { key: "conservation", label: "Conservation Area", icon: Landmark, items: conservationAreas },
-    { key: "article4", label: "Article 4 Direction", icon: ShieldAlert, items: article4Directions },
-    { key: "listed", label: "Listed Building", icon: Building2, items: listedBuildingsNearby, proximityOnly: true },
-    { key: "tpo", label: "Tree Preservation Order", icon: TreeDeciduous, items: treePreservationNearby, proximityOnly: true },
-    { key: "greenbelt", label: "Green Belt", icon: Trees, items: greenBelt },
-  ]
+function buildRows(props: RisksRestrictionsProps): Row[] {
+  const rows: Row[] = []
+
+  if (props.crimeSummary) {
+    const { totalCount } = props.crimeSummary
+    const topCategories = props.crimeSummary.topCategories
+      .slice(0, 2)
+      .map((c) => `${c.category} (${c.count})`)
+      .join(", ")
+
+    const status: Status = totalCount >= CRIME_CHECK_AT_OR_ABOVE ? "check" : "clear"
+    const level =
+      totalCount < CRIME_CLEAR_BELOW
+        ? "A low number of reports for the area."
+        : status === "check"
+          ? "A high number of reports for the area."
+          : "A moderate number of reports for the area."
+    const meaning = [level, topCategories ? `Mostly ${topCategories}.` : null].filter(Boolean).join(" ")
+
+    rows.push({
+      key: "crime",
+      check: "Crime",
+      finding: `${totalCount.toLocaleString()} reports within ~1 mile, ${formatMonth(props.crimeSummary.month)}`,
+      meaning,
+      status,
+    })
+  } else {
+    rows.push({
+      key: "crime",
+      check: "Crime",
+      finding: "Not available",
+      meaning: "data.police.uk only covers England, Wales and Northern Ireland.",
+      status: "nothing_found",
+    })
+  }
+
+  if (props.broadbandCoverage) {
+    const gigabit = props.broadbandCoverage.gigabitAvailability ?? 0
+    const superfast = props.broadbandCoverage.superfastAvailability ?? 0
+    const belowUso = props.broadbandCoverage.belowUso ?? 0
+    rows.push({
+      key: "broadband",
+      check: "Broadband",
+      finding: gigabit >= 100 ? "Gigabit available" : `Gigabit ${gigabit}% · Superfast ${superfast}%`,
+      meaning:
+        belowUso > 0
+          ? `${belowUso}% of premises here are below the Universal Service Obligation (10Mbps).`
+          : `${superfast}% gigabit, ultrafast and superfast coverage in this postcode.`,
+      status: belowUso > 0 ? "check" : gigabit > 0 || superfast > 0 ? "clear" : "nothing_found",
+    })
+  } else {
+    rows.push({
+      key: "broadband",
+      check: "Broadband",
+      finding: "Not available",
+      meaning: "No coverage data for this postcode.",
+      status: "nothing_found",
+    })
+  }
+
+  if (props.airQuality) {
+    const { no2, pm25, pm10 } = props.airQuality
+    const anyAtOrAbove = no2 >= AQ_OBJECTIVES.no2 || pm25 >= AQ_OBJECTIVES.pm25 || pm10 >= AQ_OBJECTIVES.pm10
+    rows.push({
+      key: "air-quality",
+      check: "Air quality",
+      finding: `NO₂ ${no2.toFixed(1)} · PM2.5 ${pm25.toFixed(1)} · PM10 ${pm10.toFixed(1)} µg/m³`,
+      meaning: anyAtOrAbove ? "At or above UK air quality objectives." : "All below UK air quality objectives.",
+      status: anyAtOrAbove ? "check" : "clear",
+    })
+  } else {
+    rows.push({
+      key: "air-quality",
+      check: "Air quality",
+      finding: "Not available",
+      meaning: "No modelled data for this location.",
+      status: "nothing_found",
+    })
+  }
+
+  if (props.noiseLevels.roadNoiseDb || props.noiseLevels.railNoiseDb || props.noiseLevels.airportNoiseDb) {
+    const parts: string[] = []
+    if (props.noiseLevels.roadNoiseDb) parts.push(`Road ${props.noiseLevels.roadNoiseDb.toFixed(0)} dB`)
+    if (props.noiseLevels.railNoiseDb) parts.push(`Rail ${props.noiseLevels.railNoiseDb.toFixed(0)} dB`)
+    if (props.noiseLevels.airportNoiseDb) parts.push(`Aircraft ${props.noiseLevels.airportNoiseDb.toFixed(0)} dB`)
+    const anyAboveThreshold = [props.noiseLevels.roadNoiseDb, props.noiseLevels.railNoiseDb, props.noiseLevels.airportNoiseDb].some(
+      (v) => v !== null && v >= NOISE_FLAG_DB
+    )
+    rows.push({
+      key: "noise",
+      check: "Noise",
+      finding: parts.join(" · "),
+      meaning: anyAboveThreshold
+        ? `At or above the ${NOISE_FLAG_DB} dB level that noise maps flag.`
+        : `Below the ${NOISE_FLAG_DB} dB level that noise maps flag.`,
+      status: anyAboveThreshold ? "check" : "clear",
+    })
+  } else {
+    rows.push({
+      key: "noise",
+      check: "Noise",
+      finding: "No significant road, rail or aircraft noise mapped",
+      meaning: "DEFRA strategic noise mapping, England only.",
+      status: "clear",
+    })
+  }
+
+  rows.push({
+    key: "flood",
+    check: "Flood risk",
+    finding: props.floodRiskZones.length > 0 ? joinConstraintNames(props.floodRiskZones) : "Zone 1 — low",
+    meaning:
+      props.floodRiskZones.length > 0
+        ? "This property sits in a mapped river or sea flood risk zone."
+        : "Not in a mapped river or sea flood zone.",
+    status: props.floodRiskZones.length > 0 ? "check" : "clear",
+  })
+
+  rows.push({
+    key: "conservation",
+    check: "Conservation area",
+    finding: constraintFinding(props.conservationAreas, "None found", props.linkDocuments ?? true),
+    meaning: "Exterior changes, demolition and work on trees may need consent from the council.",
+    status: props.conservationAreas.length > 0 ? "check" : "nothing_found",
+  })
+
+  rows.push({
+    key: "article4",
+    check: "Article 4 direction",
+    finding: constraintFinding(props.article4Directions, "None found", props.linkDocuments ?? true),
+    meaning:
+      "Some work you could normally do without planning permission — like extensions or new windows — may need it here.",
+    status: props.article4Directions.length > 0 ? "check" : "nothing_found",
+  })
+
+  const heritage = [...props.listedBuildingsNearby, ...props.treePreservationNearby, ...props.greenBelt]
+  rows.push({
+    key: "heritage",
+    check: "Listed building · Tree preservation · Green belt",
+    finding: constraintFinding(heritage, "None found", props.linkDocuments ?? true),
+    meaning: "Council data coverage varies, so “none found” isn’t a guarantee.",
+    status: heritage.length > 0 ? "check" : "nothing_found",
+  })
+
+  return rows
+}
+
+const DISPLAY_FONT = "var(--font-report-display)"
+const BODY_FONT = "var(--font-report-body)"
+
+export function RisksRestrictions(props: RisksRestrictionsProps) {
+  if (props.loading) {
+    return (
+      <p className="text-sm py-6 text-center" style={{ color: "#6B6B70", fontFamily: BODY_FONT }}>
+        Checking planning constraints...
+      </p>
+    )
+  }
+
+  const rows = buildRows(props)
 
   return (
-    <Card className="bg-[#CFDEE7]/30 border-none">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-2xl font-bold" style={{ color: '#0A369D', fontSize: 'calc(1.5rem * 1.04)' }}>
-          Risks & Restrictions
-        </CardTitle>
-        <p className="text-xs text-muted-foreground/70 mt-1">
-          Flood risk is from national Environment Agency mapping. The other constraints are
-          self-submitted by local councils, so coverage varies by area — a grey &quot;not found&quot;
-          result means nothing was found in available data, not a guarantee.
-        </p>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">
-            Checking planning constraints...
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {tiles.map((tile) => {
-              const Icon = tile.icon
-              const applies = tile.items.length > 0
-              const emptyIsPositive = !applies && tile.emptyIsPositive
-
-              return (
-                <div
-                  key={tile.key}
-                  className={`p-3 rounded-lg bg-background border transition-colors ${
-                    applies ? "border-amber-400/60" : emptyIsPositive ? "border-green-400/50" : "border-border/50"
-                  }`}
+    <div style={{ fontFamily: BODY_FONT, fontSize: 13 }}>
+      {/* Desktop/tablet: full table */}
+      <div className="hidden sm:block w-full overflow-x-auto">
+        <table className="w-full border-collapse" style={{ fontSize: 13 }}>
+          <thead>
+            <tr>
+              {["Check", "Finding", "What it means", "Status"].map((heading, i) => (
+                <th
+                  key={heading}
+                  className={i === 3 ? "text-right" : "text-left"}
+                  style={{
+                    fontFamily: DISPLAY_FONT,
+                    fontWeight: 500,
+                    fontSize: 12,
+                    color: "#6B6B70",
+                    padding: "6px 12px 6px 0",
+                    borderBottom: "1px solid #0B0B0C",
+                  }}
                 >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`p-2 rounded-lg ${
-                        applies
-                          ? "bg-amber-500/10 text-amber-600"
-                          : emptyIsPositive
-                            ? "bg-green-500/10 text-green-600"
-                            : "bg-gray-500/10 text-gray-500"
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-foreground">{tile.label}</span>
-                      {applies ? (
-                        <div className="mt-1 space-y-1">
-                          {tile.items.map((item, index) => (
-                            <div key={`${tile.key}-${index}`} className="text-xs text-amber-700">
-                              {tile.proximityOnly ? "Nearby: " : ""}
-                              {item.documentUrl ? (
-                                <a
-                                  href={item.documentUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="underline hover:no-underline"
-                                >
-                                  {item.name}
-                                </a>
-                              ) : (
-                                item.name
-                              )}
-                              {item.grade ? ` (Grade ${item.grade})` : ""}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className={`mt-1 text-xs ${emptyIsPositive ? "text-green-700" : "text-muted-foreground/70"}`}>
-                          {tile.emptyLabel ?? "Not found in available data"}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const statusInfo = STATUS_COPY[row.status]
+              return (
+                <tr key={row.key}>
+                  <td className="font-semibold align-top" style={{ padding: "9px 12px 9px 0", borderBottom: "1px solid #E6E6E8" }}>
+                    {row.check}
+                  </td>
+                  <td className="align-top" style={{ padding: "9px 12px 9px 0", borderBottom: "1px solid #E6E6E8" }}>
+                    {row.finding}
+                  </td>
+                  <td className="align-top" style={{ padding: "9px 12px 9px 0", borderBottom: "1px solid #E6E6E8", color: "#6B6B70" }}>
+                    {row.meaning}
+                  </td>
+                  <td className="text-right align-top whitespace-nowrap" style={{ padding: "9px 0", borderBottom: "1px solid #E6E6E8" }}>
+                    <span style={{ color: statusInfo.color }}>
+                      {statusInfo.dot} {statusInfo.label}
+                    </span>
+                  </td>
+                </tr>
               )
             })}
-          </div>
-        )}
+          </tbody>
+        </table>
+      </div>
 
-        {!loading && (
-          <div className="mt-3 p-3 rounded-lg bg-background border border-border/50">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-red-500/10 text-red-600">
-                <Siren className="w-4 h-4" />
+      {/* Mobile: each row stacks — check + status on top, then finding, then meaning */}
+      <div className="sm:hidden">
+        {rows.map((row) => {
+          const statusInfo = STATUS_COPY[row.status]
+          return (
+            <div key={row.key} className="py-3 border-b" style={{ borderColor: "#E6E6E8" }}>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="font-semibold">{row.check}</span>
+                <span className="shrink-0 whitespace-nowrap" style={{ color: statusInfo.color }}>
+                  {statusInfo.dot} {statusInfo.label}
+                </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-foreground">Crime</span>
-                {crimeSummary ? (
-                  <>
-                    <div className="mt-1 text-xs text-foreground/80">
-                      <span className="font-semibold">{crimeSummary.totalCount.toLocaleString()}</span> crimes
-                      reported within ~1 mile in {formatMonth(crimeSummary.month)}
-                    </div>
-                    {crimeSummary.topCategories.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {crimeSummary.topCategories.map((cat) => (
-                          <span
-                            key={cat.category}
-                            className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-700"
-                          >
-                            {cat.category}: {cat.count}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="mt-1 text-xs text-muted-foreground/70">
-                    Not available — data.police.uk only covers England, Wales, and Northern Ireland
-                  </div>
-                )}
+              <div className="mt-1">{row.finding}</div>
+              <div className="mt-0.5" style={{ color: "#6B6B70" }}>
+                {row.meaning}
               </div>
             </div>
-          </div>
-        )}
+          )
+        })}
+      </div>
 
-        {!loading && (
-          <div className="mt-3 p-3 rounded-lg bg-background border border-border/50">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600">
-                <Wifi className="w-4 h-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-foreground">Broadband</span>
-                {broadbandCoverage ? (
-                  <>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700">
-                        Gigabit: {broadbandCoverage.gigabitAvailability ?? 0}%
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700">
-                        Ultrafast (300Mbps+): {broadbandCoverage.ultrafastAvailability ?? 0}%
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700">
-                        Superfast (30Mbps+): {broadbandCoverage.superfastAvailability ?? 0}%
-                      </span>
-                    </div>
-                    {(broadbandCoverage.belowUso ?? 0) > 0 && (
-                      <div className="mt-1.5 text-xs text-amber-700">
-                        {broadbandCoverage.belowUso}% of premises here are below the Universal Service
-                        Obligation (10Mbps) — may not be eligible for a standard broadband connection
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="mt-1 text-xs text-muted-foreground/70">
-                    Not available for this postcode
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!loading && (
-          <div className="mt-3 p-3 rounded-lg bg-background border border-border/50">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-sky-500/10 text-sky-600">
-                <Wind className="w-4 h-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-foreground">Air Quality</span>
-                {airQuality ? (
-                  <>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${aqBadgeColor(airQuality.no2, AQ_OBJECTIVES.no2)}`}>
-                        NO2: {airQuality.no2.toFixed(1)} µg/m³
-                      </span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${aqBadgeColor(airQuality.pm25, AQ_OBJECTIVES.pm25)}`}>
-                        PM2.5: {airQuality.pm25.toFixed(1)} µg/m³
-                      </span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${aqBadgeColor(airQuality.pm10, AQ_OBJECTIVES.pm10)}`}>
-                        PM10: {airQuality.pm10.toFixed(1)} µg/m³
-                      </span>
-                    </div>
-                    <div className="mt-1.5 text-xs text-muted-foreground/70">
-                      Modelled annual mean background levels (DEFRA UK-AIR, 1km grid). Red = at or above
-                      the UK annual mean objective for that pollutant.
-                    </div>
-                  </>
-                ) : (
-                  <div className="mt-1 text-xs text-muted-foreground/70">Not available for this location</div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!loading && (
-          <div className="mt-3 p-3 rounded-lg bg-background border border-border/50">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-fuchsia-500/10 text-fuchsia-600">
-                <Volume2 className="w-4 h-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-foreground">Noise</span>
-                {noiseLevels.roadNoiseDb || noiseLevels.railNoiseDb || noiseLevels.airportNoiseDb ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {noiseLevels.roadNoiseDb && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-fuchsia-500/10 text-fuchsia-700">
-                        Road: {noiseLevels.roadNoiseDb.toFixed(0)} dB
-                      </span>
-                    )}
-                    {noiseLevels.railNoiseDb && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-fuchsia-500/10 text-fuchsia-700">
-                        Rail: {noiseLevels.railNoiseDb.toFixed(0)} dB
-                      </span>
-                    )}
-                    {noiseLevels.airportNoiseDb && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-fuchsia-500/10 text-fuchsia-700">
-                        Aircraft: {noiseLevels.airportNoiseDb.toFixed(0)} dB
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-1 text-xs text-green-700">
-                    No significant road, rail, or aircraft noise mapped at this location
-                  </div>
-                )}
-                <div className="mt-1.5 text-xs text-muted-foreground/70">
-                  Lden (day-evening-night average) from DEFRA strategic noise mapping, England only.
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      <p className="mt-2.5" style={{ fontSize: 12, color: "#6B6B70" }}>
+        Flood risk is from national Environment Agency mapping. The other constraints are self-submitted by local
+        councils, so coverage varies by area — &quot;nothing found&quot; means nothing was found in available data,
+        not a guarantee.
+      </p>
+    </div>
   )
 }

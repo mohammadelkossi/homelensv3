@@ -4,6 +4,7 @@ import "./globals.css";
 import { LoginPopupProvider } from "@/components/login-popup";
 import { PostHogProvider } from "@/components/posthog-provider";
 import { TypeformEmbed } from "@/components/typeform-embed";
+import { PromoBanner } from "@/components/promo-banner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <PostHogProvider />
+        <PromoBanner />
         <LoginPopupProvider>
           {children}
         </LoginPopupProvider>

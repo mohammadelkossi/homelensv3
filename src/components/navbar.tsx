@@ -7,6 +7,7 @@ import { Menu, X, ChevronDown } from "lucide-react"
 import { useLoginPopup } from "@/components/login-popup"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User } from "@supabase/supabase-js"
+import { interBody } from "@/app/results/report-fonts"
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -20,13 +21,19 @@ interface NavbarProps {
   isScrolled?: boolean
 }
 
+// Matches the homepage hero's primary button: square, near-black, Inter 14px medium.
+const GET_STARTED_CLASS = `${interBody.variable} rounded-none bg-[#0B0B0C] hover:bg-[#2A2A2E] text-white h-[40px] px-6 text-[14px] font-medium border border-[#0B0B0C] shadow-none`
+const BUTTON_FONT_STYLE = { fontFamily: "var(--font-report-body)" }
+// Matches the hero's secondary ("See sample report") button: square, white, black outline.
+const SECONDARY_CLASS = `${interBody.variable} rounded-none bg-white hover:bg-[#F4F4F5] text-[#0B0B0C] hover:text-[#0B0B0C] h-[40px] px-6 text-[14px] font-medium border border-[#0B0B0C] shadow-none focus-visible:ring-[#0A369D]/50`
+
 export function Navbar({ isScrolled = false }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
   const accountDropdownRef = useRef<HTMLDivElement>(null)
   const { openLogin } = useLoginPopup()
-  const backgroundColor = isScrolled ? '#FFFFFF' : 'transparent'
+  const backgroundColor = isScrolled ? '#FBFAF7' : 'transparent'
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -53,7 +60,7 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
   }, [])
 
   return (
-    <nav className="border-b border-gray-200 shadow-sm sticky top-0" style={{ zIndex: 50, backgroundColor }}>
+    <nav className={`${interBody.variable} border-b border-gray-200 shadow-sm sticky top-0`} style={{ zIndex: 50, backgroundColor, fontFamily: "var(--font-report-body)" }}>
       <div className="container mx-auto px-4 sm:px-6" style={{ backgroundColor }}>
         <div className="flex items-center justify-between min-h-[4rem] md:min-h-[4.5rem]" style={{ backgroundColor }}>
           <Link href="/" className="flex items-center shrink-0">
@@ -65,11 +72,11 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
               <NavigationMenuList className="flex items-center justify-center" style={{ gap: '40px', backgroundColor }}>
                 <NavigationMenuItem>
                   <NavigationMenuLink asChild>
-                    <Link href="/pricing" className="!text-black hover:!text-gray-600 transition-colors px-4 py-2 no-underline" style={{ color: '#000000', fontWeight: '600' }}>Pricing</Link>
+                    <Link href="/pricing" className="!text-[#0B0B0C] hover:!text-gray-600 transition-colors px-4 py-2 no-underline text-[14px]" style={{ fontWeight: 500 }}>Pricing</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
                 <NavigationMenuItem>
-                  <NavigationMenuTrigger className="!bg-transparent !text-black hover:!text-gray-600 data-[state=open]:!bg-transparent" style={{ color: '#000000', fontWeight: '600' }}>Tools</NavigationMenuTrigger>
+                  <NavigationMenuTrigger className="!bg-transparent !text-[#0B0B0C] hover:!text-gray-600 data-[state=open]:!bg-transparent text-[14px]" style={{ fontWeight: 500 }}>Tools</NavigationMenuTrigger>
                   <NavigationMenuContent>
                     <NavigationMenuLink asChild>
                       <Link href="/calculator" className="!text-black no-underline whitespace-nowrap" style={{ color: '#000000' }}>Ongoing costs</Link>
@@ -84,8 +91,8 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
           </div>
 
           <div className="hidden md:flex items-center gap-x-[22px] shrink-0">
-            <Button asChild size="lg" className="bg-[#0A369D] text-white hover:bg-[#082e83] rounded-full h-[40px] px-[30px] text-[1.1rem]" style={{ fontWeight: '600' }}>
-              <Link href="/preferences" className="no-underline text-white !text-white" style={{ fontWeight: '600', color: '#ffffff' }}>Get Started</Link>
+            <Button asChild size="lg" className={GET_STARTED_CLASS} style={BUTTON_FONT_STYLE}>
+              <Link href="/preferences" className="no-underline !text-white">Get started</Link>
             </Button>
             {user ? (
               <div className="relative" ref={accountDropdownRef}>
@@ -130,8 +137,8 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
                 )}
               </div>
             ) : (
-              <Button variant="outline" size="lg" className="text-black border-[#0A369D] hover:bg-[#0A369D]/10 focus-visible:ring-[#0A369D]/50 rounded-full h-[40px] px-[30px] text-[1.1rem]" style={{ fontWeight: '600' }} onClick={openLogin}>
-                Log In
+              <Button variant="outline" size="lg" className={SECONDARY_CLASS} style={BUTTON_FONT_STYLE} onClick={openLogin}>
+                Log in
               </Button>
             )}
           </div>
@@ -163,11 +170,11 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
               </>
             )}
             <div className="flex flex-col gap-2 px-4 pt-2">
-              <Button asChild size="lg" className="w-full bg-[#0A369D] text-white hover:bg-[#082e83] rounded-full h-11" style={{ fontWeight: '600' }}>
-                <Link href="/preferences" className="no-underline text-white" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
+              <Button asChild size="lg" className={`${GET_STARTED_CLASS} w-full !h-11`} style={BUTTON_FONT_STYLE}>
+                <Link href="/preferences" className="no-underline !text-white" onClick={() => setMobileMenuOpen(false)}>Get started</Link>
               </Button>
               {user ? (
-                <Button variant="outline" size="lg" className="w-full text-black border-[#0A369D] hover:bg-[#0A369D]/10 rounded-full h-11" style={{ fontWeight: '600' }} onClick={async () => {
+                <Button variant="outline" size="lg" className={`${SECONDARY_CLASS} w-full !h-11`} style={BUTTON_FONT_STYLE} onClick={async () => {
                   setMobileMenuOpen(false)
                   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
                   await supabase.auth.signOut()
@@ -175,8 +182,8 @@ export function Navbar({ isScrolled = false }: NavbarProps) {
                   Sign out
                 </Button>
               ) : (
-                <Button variant="outline" size="lg" className="w-full text-black border-[#0A369D] hover:bg-[#0A369D]/10 rounded-full h-11" style={{ fontWeight: '600' }} onClick={() => { setMobileMenuOpen(false); openLogin(); }}>
-                  Log In
+                <Button variant="outline" size="lg" className={`${SECONDARY_CLASS} w-full !h-11`} style={BUTTON_FONT_STYLE} onClick={() => { setMobileMenuOpen(false); openLogin(); }}>
+                  Log in
                 </Button>
               )}
             </div>

@@ -4,21 +4,21 @@ import { ApifyClient } from 'apify-client';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
-import {
-  calculateDistanceKm,
-  getAllNearbyPlaces,
-  type ApifyAmenityFallback,
-} from '@/lib/nearby-amenities';
-import { fetchPlanningConstraints } from '@/lib/planning-constraints';
-import { fetchCrimeSummary } from '@/lib/crime-data';
-import { fetchBroadbandCoverage } from '@/lib/broadband-coverage';
-import { fetchEnvironmentData } from '@/lib/environment-data';
+import { calculateDistanceKm, nearbyPlacesFromApify } from '@/lib/nearby-amenities';
 import {
   hasFreeReportLimitReached,
   reportLimitReachedMessage,
   isProProfile,
 } from '@/lib/report-generation';
-import { getPropertyRecord, searchAddresses } from '@/lib/homedata';
+import { mapPropertyTypeToCode } from '@/lib/property-type';
+import { constructionAgeBandToRange } from '@/lib/epc';
+import { getPricePaidDataEffectiveToday } from '@/lib/price-paid-data-clock';
+import {
+  normalizeAddress,
+  fetchEpcRowsForPostcode,
+  extractFloorArea,
+  fetchEpcCertificateDocument,
+} from '@/lib/epc-register';
 
 export const maxDuration = 60;
 
@@ -32,22 +32,70 @@ function checkFeature(features: string[] | undefined, keywords: string[]): strin
   ) ? 'Yes' : 'No';
 }
 
-function mapPropertyTypeToCode(propertyType: string | null | undefined): 'D' | 'S' | 'T' | 'F' | 'O' | null {
-  if (!propertyType) return null;
-  const normalized = propertyType.trim().toLowerCase();
-  if (!normalized || normalized === 'n/a') return null;
-  if (normalized.includes('semi')) return 'S';
-  if (normalized.includes('terrace')) return 'T';
-  if (normalized.includes('flat') || normalized.includes('apartment') || normalized.includes('maisonette')) return 'F';
-  if (normalized.includes('detached') || normalized.includes('bungalow') || normalized.includes('cottage')) return 'D';
-  if (normalized.includes('townhouse')) return 'T';
-  return 'O';
+// Rightmove's own structured tenure field — only shown when it's one of the three
+// known values; anything else (null, or a future value this doesn't recognise)
+// abstains rather than guess, since there's no independent source to cross-check
+// tenure against (unlike EPC rating/address, which have the register + SPARQL).
+function normalizeTenure(rawTenure: unknown): string | null {
+  if (typeof rawTenure !== 'string') return null;
+  switch (rawTenure.toUpperCase()) {
+    case 'FREEHOLD':
+      return 'Freehold';
+    case 'LEASEHOLD':
+      return 'Leasehold';
+    case 'SHARE_OF_FREEHOLD':
+      return 'Share of freehold';
+    default:
+      return null;
+  }
 }
+
 
 // ─── FIX 1: Run floorplan + description extraction in parallel ───────────────
 // Previously: sequential fallback (floorplan → description). Now both run at
 // once and we take the first non-null result. Also downgraded description call
 // from gpt-4 → gpt-4o-mini (10x cheaper, fast enough for simple text search).
+
+// Fallback for when the EPC register lookup (postcode search + address match,
+// see matchSubjectEpcRow) can't resolve a certificate — typically because
+// Rightmove's own listing address has no house number to disambiguate between
+// several certificates on the same street. Rightmove renders the specific
+// certificate for THIS listing as a chart image (no address-matching needed,
+// since Rightmove already knows which certificate is this property's own), so
+// reading the band off that image sidesteps the whole disambiguation problem.
+// Only gets the current rating letter — construction age band and floor area
+// aren't legible from this chart, so those still rely on the register lookup.
+async function extractEpcBandFromImage(epcImageUrl: string, openaiClient: OpenAI): Promise<string | null> {
+  try {
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `You are analyzing a UK property Energy Performance Certificate (EPC) rating chart image. It shows a vertical bar split into colour bands labelled A (most efficient, top) through G (least efficient, bottom). One or two pointer arrows mark where the property sits on the bar. If there are two arrows, one marks the "Current" rating and the other marks the "Potential" rating — you must read the "Current" one only, ignore "Potential".
+Respond with ONLY the single current rating letter (A, B, C, D, E, F, or G). If you cannot clearly identify the current rating from the image, respond with "NOT_FOUND".
+Format your response as a single letter only (e.g., "D" or "NOT_FOUND").`,
+            },
+            {
+              type: 'image_url',
+              image_url: { url: epcImageUrl },
+            },
+          ],
+        },
+      ],
+      max_tokens: 10,
+    });
+    const result = response.choices[0]?.message?.content?.trim().toUpperCase();
+    if (result && /^[A-G]$/.test(result)) return result;
+    return null;
+  } catch (error) {
+    console.error('Error extracting EPC band from image:', error);
+    return null;
+  }
+}
 
 async function extractAreaFromFloorplan(floorplanUrl: string, openaiClient: OpenAI): Promise<string | null> {
   try {
@@ -185,39 +233,7 @@ async function getPostcodeFromCoordinates(
   }
 }
 
-const HOMEDATA_FLOOR_AREA_LOOKUP_LIMIT = 25;
-const HOMEDATA_LOOKUP_CONCURRENCY = 5;
-
-// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
-// Base host for the new "Get energy performance of buildings data" service.
-const EPC_API_BASE_DEFAULT = 'https://api.get-energy-performance-data.communities.gov.uk';
-// The new /api/domestic/search returns a summary WITHOUT floor area. Floor area
-// lives on the full certificate, fetched via /api/certificate?certificate_number=…
-// These bound how many certificate lookups we do per report (latency + rate limits;
-// the service allows 6000 requests / 5 min per IP). Overflow falls back to Homedata.
-const EPC_CERTIFICATE_LOOKUP_LIMIT = 150;
-const EPC_CERTIFICATE_LOOKUP_CONCURRENCY = 8;
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  mapper: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = [];
-  for (let index = 0; index < items.length; index += limit) {
-    const batch = items.slice(index, index + limit);
-    const batchResults = await Promise.all(batch.map(mapper));
-    results.push(...batchResults);
-  }
-  return results;
-}
-
 // ─── Address / price helpers (unchanged) ────────────────────────────────────
-
-function normalizeAddress(value: string | null | undefined): string | null {
-  if (!value) return null;
-  return value.toLowerCase().replace(/,/g, '').replace(/\s+/g, ' ').trim();
-}
 
 type PriceHistoryEntry = { price: string; year: string };
 
@@ -256,10 +272,23 @@ function normalizePriceHistory(rawHistory: unknown): PriceHistoryEntry[] {
 function extractStreetSearchFragment(listingAddress: string): string | null {
   const s = listingAddress.trim();
   if (!s || s === 'N/A') return null;
-  const first = s.split(',')[0]?.trim() ?? s;
+  const segments = s.split(',').map((seg) => seg.trim()).filter(Boolean);
+  if (segments.length === 0) return null;
+
+  const first = segments[0];
   const withoutFlat = first.replace(/^(Flat|Unit|Apartment|Suite)\s+[^,]+,?\s*/i, '').trim();
   const withoutLeading = withoutFlat.replace(/^\d+[A-Za-z]?\s+/, '').trim();
-  return withoutLeading.length < 4 ? null : withoutLeading.toLowerCase();
+  if (withoutLeading.length >= 4) return withoutLeading.toLowerCase();
+
+  // Some addresses (e.g. Land Registry's composed "9, Hopwood Bank, Leeds, LS18")
+  // put the house number and street in separate segments rather than "9 Hopwood
+  // Bank" together — if the first segment is just a bare number, the street is
+  // the next segment instead.
+  if (/^\d+[A-Za-z]?$/.test(first) && segments[1] && segments[1].length >= 4) {
+    return segments[1].toLowerCase();
+  }
+
+  return null;
 }
 
 type SparqlLiteral = { type: string; value: string; datatype?: string };
@@ -378,146 +407,242 @@ LIMIT 5`;
   return null;
 }
 
-// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
-// Migrated from the retired epc.opendatacommunities.org service to the new
-// "Get energy performance of buildings data" service.
-//   • Default endpoint → https://api.get-energy-performance-data.communities.gov.uk/api/domestic/search
-//   • Auth → Bearer token only (old Basic email:apikey scheme removed)
-//   • Query param → page_size (was: size)
-//   • Response shape → { data: [...], pagination: {...} }  (was: { rows: [...] })
-//   • 404 = "no certificates for this postcode" (normal), 429 = rate limited (retry)
-async function fetchEpcRowsForPostcode(postcode: string, retries = 2): Promise<any[]> {
-  if (!postcode) return [];
-
-  const bearerToken = process.env.EPC_API_BEARER_TOKEN?.trim();
-  if (!bearerToken) return [];
-
-  const base = process.env.EPC_API_BASE?.trim() || EPC_API_BASE_DEFAULT;
-  const endpoint =
-    process.env.EPC_API_ENDPOINT?.trim() || `${base}/api/domestic/search`;
-
-  const url = `${endpoint}?postcode=${encodeURIComponent(postcode)}&page_size=500`;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await fetch(url, {
-        cache: 'no-store',
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${bearerToken}`,
-        },
-      });
-
-      // 429: back off and retry (honour Retry-After header if present)
-      if (response.status === 429) {
-        const wait = Number(response.headers.get('Retry-After')) * 1000 || 1000 * (attempt + 1);
-        await new Promise(r => setTimeout(r, wait));
-        continue;
-      }
-
-      // 404 = no certificates found for this postcode (normal, not an error)
-      if (response.status === 404) return [];
-
-      const contentType = response.headers.get('content-type') ?? '';
-      if (!response.ok || !contentType.includes('json')) return [];
-
-      const data = await response.json();
-      // New API shape: { data: [...], pagination: {...} }
-      return Array.isArray(data?.data) ? data.data : [];
-    } catch (error) {
-      console.error('Error fetching EPC data:', error);
-      return [];
-    }
-  }
-  return [];
-}
-
-// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
-// Pull floor area out of a full EPC certificate document. The certificate
-// endpoint's response is free-form in the spec, so we defensively accept every
-// plausible spelling of the floor-area key (camelCase, hyphenated, snake_case,
-// upper). Returns null if none present or the value isn't a positive number.
-function extractFloorArea(doc: Record<string, unknown> | null | undefined): number | null {
-  if (!doc || typeof doc !== 'object') return null;
-  const candidateKeys = [
-    'totalFloorArea',
-    'total-floor-area',
-    'total_floor_area',
-    'TOTAL_FLOOR_AREA',
-    'totalFloorAreaSquareMetres',
-    'floorArea',
-  ];
-  for (const key of candidateKeys) {
-    const raw = (doc as Record<string, unknown>)[key];
-    if (raw != null && raw !== '') {
-      const n = Number(raw);
-      if (Number.isFinite(n) && n > 0) return n;
-    }
-  }
-  return null;
-}
-
-// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
-// Fetch a single EPC certificate by its certificate number and return its floor
-// area. This is the second half of the two-step lookup: search gives us the
-// certificateNumber, this gives us the floor area the search summary omits.
-// Response shape: { data: { ...full EPC document... } }.
-async function fetchCertificateFloorArea(certificateNumber: string, retries = 2): Promise<number | null> {
-  if (!certificateNumber) return null;
-
-  const bearerToken = process.env.EPC_API_BEARER_TOKEN?.trim();
-  if (!bearerToken) return null;
-
-  const base = process.env.EPC_API_BASE?.trim() || EPC_API_BASE_DEFAULT;
-  const url = `${base}/api/certificate?certificate_number=${encodeURIComponent(certificateNumber)}`;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await fetch(url, {
-        cache: 'no-store',
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${bearerToken}`,
-        },
-      });
-
-      // 429: back off and retry (honour Retry-After header if present)
-      if (response.status === 429) {
-        const wait = Number(response.headers.get('Retry-After')) * 1000 || 1000 * (attempt + 1);
-        await new Promise(r => setTimeout(r, wait));
-        continue;
-      }
-
-      // 404 = certificate not found (normal, not an error)
-      if (response.status === 404) return null;
-
-      const contentType = response.headers.get('content-type') ?? '';
-      if (!response.ok || !contentType.includes('json')) return null;
-
-      const json = await response.json();
-      // CertificateResponse: { data: { ...full EPC document... } }
-      const doc = (json?.data ?? json) as Record<string, unknown>;
-      return extractFloorArea(doc);
-    } catch (error) {
-      console.error('Error fetching EPC certificate:', error);
-      return null;
-    }
-  }
-  return null;
-}
-
-type LandRegistrySale = {
-  paon?: string | null;
-  saon?: string | null;
-  street?: string | null;
-  postcode?: string | null;
-  price?: number | null;
+// Last-resort full-address fallback for when the Land Registry SPARQL match above
+// has nothing to go on (no sold-price history at all — roughly half of current
+// listings) or comes back empty. Runs the "Rightmove EPC Full Address Finder" Apify
+// actor, which reads the property's own EPC certificate image via vision and
+// cross-matches it against the EPC register for that outcode/incode — so unlike the
+// SPARQL path, it needs no price history and isn't thrown off by a coordinate-derived
+// postcode drifting onto a neighbouring address.
+type EpcFinderActorResult = {
+  fullAddress?: string;
+  possibleAddresses?: string[];
+  epcMatched?: 'accurate' | 'approx' | 'none';
 };
 
-function saleLookupKey(sale: LandRegistrySale): string {
-  return [sale.postcode, sale.paon, sale.saon, sale.street]
-    .map((part) => (part ?? '').trim().toLowerCase())
-    .join('|');
+async function getFullAddressFromEpcFinderActor(
+  apifyClient: ApifyClient,
+  outcode: string | null,
+  incode: string | null,
+  propertyType: string | null,
+  epcImageUrl: string | null,
+  waitSecs: number
+): Promise<string | null> {
+  if (!outcode || !incode || !propertyType || !epcImageUrl || !process.env.OPENAI_API_KEY) return null;
+
+  try {
+    const run = await apifyClient.actor('dhrumil~rightmove-epc-full-address-finder').call(
+      {
+        openAiApiKey: process.env.OPENAI_API_KEY,
+        propertyType,
+        epc: epcImageUrl,
+        outcode,
+        incode,
+        populateHistory: false,
+        onlyMatched: false,
+      },
+      { waitSecs }
+    );
+
+    const { items } = await apifyClient.dataset(run.defaultDatasetId).listItems();
+    const result = items?.[0] as EpcFinderActorResult | undefined;
+    if (!result?.fullAddress) return null;
+
+    // "accurate" can still come back alongside several possibleAddresses (e.g. a
+    // terrace where several EPC certificates share the same rating/floor area) —
+    // that's an ambiguous match wearing a confident label, so abstain rather than
+    // guess, consistent with matchSubjectEpcRow's approach elsewhere in this file.
+    if (result.possibleAddresses && result.possibleAddresses.length > 1) return null;
+    if (result.epcMatched !== 'accurate') return null;
+
+    return result.fullAddress;
+  } catch (error) {
+    console.error('Error running EPC full-address-finder actor:', error);
+    return null;
+  }
+}
+
+// Pull a leading house number / flat identifier off a listing address, e.g.
+// "Flat 3, Example House, Example Street" → "3", "12a Example Street" → "12a".
+// Used as an extra discriminator when matching EPC rows, since (unlike the
+// Land Registry query) there's no price+year to disambiguate multiple units
+// sharing a postcode and street name.
+function extractHouseNumberFragment(listingAddress: string): string | null {
+  const first = listingAddress.trim().split(',')[0]?.trim();
+  if (!first) return null;
+  const flatMatch = first.match(/^(?:Flat|Unit|Apartment|Suite)\s+([^,]+)/i);
+  if (flatMatch) return flatMatch[1].trim().toLowerCase();
+  const numberMatch = first.match(/^(\d+[A-Za-z]?)\b/);
+  return numberMatch ? numberMatch[1].toLowerCase() : null;
+}
+
+const UK_POSTCODE_OR_OUTCODE = /^[A-Z]{1,2}\d[A-Z\d]?(\s*\d[A-Z]{2})?$/i;
+const UK_FULL_POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]? \d[A-Z]{2}$/;
+
+// The listing's own postcode: Rightmove's outcode + incode fields first, else a
+// full postcode written into the display address ("Wolfreton Garth, Kirk Ella, HU10 7AD").
+function listingPostcode(listing: { outcode?: unknown; incode?: unknown; displayAddress?: unknown }): string | null {
+  const outcode = typeof listing.outcode === 'string' ? listing.outcode.trim().toUpperCase() : '';
+  const incode = typeof listing.incode === 'string' ? listing.incode.trim().toUpperCase() : '';
+  const fromFields = `${outcode} ${incode}`;
+  if (UK_FULL_POSTCODE.test(fromFields)) return fromFields;
+
+  const address = typeof listing.displayAddress === 'string' ? listing.displayAddress : '';
+  const match = address.match(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i);
+  return match ? `${match[1].toUpperCase()} ${match[2].toUpperCase()}` : null;
+}
+
+// EPC rows often carry only line 1 + postcode (no town), e.g. "61 King Edward
+// Crescent, LS18 4BE". The listing's own displayAddress ("King Edward Crescent,
+// Horsforth, Leeds") has the locality, so borrow any parts the row is missing.
+function composeEpcAddress(row: Record<string, unknown>, listingAddress: string): string | null {
+  const lines = [row['addressLine1'], row['addressLine2'], row['addressLine3'], row['addressLine4']]
+    .map((p) => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean);
+  const postcode = typeof row['postcode'] === 'string' ? row['postcode'].trim() : '';
+  if (!lines.length && !postcode) return null;
+
+  const present = lines.join(' ').toLowerCase();
+  const locality = listingAddress
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p && !UK_POSTCODE_OR_OUTCODE.test(p) && !present.includes(p.toLowerCase()));
+
+  return [...lines, ...locality, postcode].filter(Boolean).join(', ');
+}
+
+// Fallback full-address match against the EPC register, used when the Land
+// Registry price-paid match comes back null (property never sold, or the
+// match was ambiguous). No price/year to filter with here, so we narrow by
+// exact postcode (fetchEpcRowsForPostcode) + street-name fragment, plus a
+// house/flat number fragment when the listing address has one. Only accepts
+// the match if exactly one distinct address survives the filter.
+// Shared EPC match for the subject property — used both to resolve its full
+// address (when Land Registry's SPARQL match comes back null) and to read its
+// own rating/age-band/floor-area. One match, reused for both, so the address
+// and the header facts can never come from two different certificates.
+async function matchSubjectEpcRow(
+  fullPostcode: string | null,
+  listingAddress: string
+): Promise<Record<string, unknown> | null> {
+  if (!fullPostcode) return null;
+
+  const rows = await fetchEpcRowsForPostcode(fullPostcode.trim().toUpperCase());
+  if (!rows.length) return null;
+
+  const streetFragment = extractStreetSearchFragment(listingAddress);
+  const numberFragment = extractHouseNumberFragment(listingAddress);
+
+  if (streetFragment) {
+    // Keyed by certificateNumber (always unique), not by normalized address —
+    // two certificates for the same property can normalize to the identical
+    // string (e.g. "4, Greenbanks Drive" and "4 Greenbanks Drive" both become
+    // "4 greenbanks drive" once commas are stripped), which would otherwise
+    // silently collapse them to one entry via Map overwrite and skip the
+    // most-recent-certificate resolution below entirely.
+    const matches: Record<string, unknown>[] = []
+    const normalizedByMatch = new Map<Record<string, unknown>, string>()
+    for (const row of rows) {
+      const combined = [row['addressLine1'], row['addressLine2'], row['addressLine3'], row['addressLine4']]
+        .filter(Boolean)
+        .join(' ');
+      const normalized = normalizeAddress(combined || undefined);
+      if (!normalized || !normalized.includes(streetFragment)) continue;
+      if (numberFragment) {
+        // Exact match on the leading house/flat number, not substring — "9" must
+        // not match "29 Hopwood Bank" just because "29" contains the digit "9".
+        const leadingNumber = normalized.match(/^(\d+[a-z]?)\b/)?.[1];
+        if (leadingNumber !== numberFragment) continue;
+      }
+      matches.push(row);
+      normalizedByMatch.set(row, normalized);
+    }
+
+    if (matches.length === 1) return matches[0];
+
+    // A property re-certified over the years gets a new EPC each time, often
+    // with slightly different address formatting between certs — if every
+    // match normalizes to the same address, or shares the same UPRN, it's
+    // unambiguously one property; just take its most recent certificate.
+    if (matches.length > 1) {
+      const distinctAddresses = new Set(matches.map((row) => normalizedByMatch.get(row)))
+      const uprns = new Set(matches.map((row) => row['uprn']).filter((u) => u != null));
+      if (distinctAddresses.size === 1 || uprns.size === 1) {
+        return [...matches].sort((a, b) => {
+          const dateA = typeof a['registrationDate'] === 'string' ? a['registrationDate'] : '';
+          const dateB = typeof b['registrationDate'] === 'string' ? b['registrationDate'] : '';
+          return dateB.localeCompare(dateA);
+        })[0];
+      }
+    }
+  }
+
+  // Postcode search returned exactly one certificate — safe to use even without a confident address match.
+  if (rows.length === 1) return rows[0];
+
+  return null;
+}
+
+// The search summary row uses currentEnergyEfficiencyBand (not currentEnergyRating)
+// and has no construction_age_band field at all — that only exists nested inside
+// the full certificate's sap_building_parts[]. Candidate keys cover both the
+// summary row's camelCase and the full certificate's snake_case.
+function extractCurrentEnergyRating(doc: Record<string, unknown> | null | undefined): string | null {
+  if (!doc) return null;
+  const candidateKeys = [
+    'currentEnergyEfficiencyBand',
+    'current_energy_efficiency_band',
+    'currentEnergyRating',
+    'current-energy-rating',
+  ];
+  for (const key of candidateKeys) {
+    const raw = doc[key];
+    if (typeof raw === 'string' && raw.trim()) return raw.trim().toUpperCase();
+  }
+  return null;
+}
+
+// construction_age_band lives per sap_building_part (main dwelling + any
+// extensions can each have their own). The first entry is the main dwelling,
+// which is what "estimated year built" should reflect, not a later extension.
+function extractConstructionAgeBandCode(doc: Record<string, unknown> | null | undefined): string | null {
+  if (!doc) return null;
+  const parts = doc['sap_building_parts'];
+  if (Array.isArray(parts) && parts.length > 0) {
+    const band = (parts[0] as Record<string, unknown> | undefined)?.['construction_age_band'];
+    if (typeof band === 'string' && band.trim()) return band.trim();
+  }
+  // Fallback in case a differently-shaped response ever carries it top-level.
+  const topLevel = doc['constructionAgeBand'] ?? doc['construction-age-band'] ?? doc['construction_age_band'];
+  return typeof topLevel === 'string' && topLevel.trim() ? topLevel.trim() : null;
+}
+
+async function subjectEpcDetailsFromRow(
+  row: Record<string, unknown> | null
+): Promise<{ currentEnergyRating: string | null; constructionAgeBand: string | null; totalFloorArea: number | null } | null> {
+  if (!row) return null;
+
+  let currentEnergyRating = extractCurrentEnergyRating(row);
+  let constructionAgeBandCode = extractConstructionAgeBandCode(row);
+  let totalFloorArea = floorAreaFromEpcRow(row);
+
+  const certificateNumber =
+    (row['certificateNumber'] as string | undefined) ?? (row['certificate-number'] as string | undefined) ?? null;
+
+  // construction_age_band is never in the search summary, so fetch the full
+  // certificate whenever we have a number and are still missing something.
+  if (certificateNumber && (!currentEnergyRating || !constructionAgeBandCode || !totalFloorArea)) {
+    const doc = await fetchEpcCertificateDocument(certificateNumber);
+    currentEnergyRating = currentEnergyRating ?? extractCurrentEnergyRating(doc);
+    constructionAgeBandCode = constructionAgeBandCode ?? extractConstructionAgeBandCode(doc);
+    totalFloorArea = totalFloorArea ?? extractFloorArea(doc);
+  }
+
+  return {
+    currentEnergyRating,
+    constructionAgeBand: constructionAgeBandToRange(constructionAgeBandCode),
+    totalFloorArea,
+  };
 }
 
 // ─── EPC MIGRATION ──────────────────────────────────────────────────────────
@@ -535,225 +660,17 @@ function floorAreaFromEpcRow(row: Record<string, unknown>): number | null {
   return floorArea;
 }
 
-// ─── EPC MIGRATION ──────────────────────────────────────────────────────────
-// New API returns camelCase address fields (addressLine1..4). Legacy snake-case
-// keys kept as a fallback for the old service.
-function matchEpcRowForSale(
-  sale: LandRegistrySale,
-  epcRows: Record<string, unknown>[]
-): Record<string, unknown> | null {
-  const targetAddress = normalizeAddress(`${sale.paon ?? ''} ${sale.saon ?? ''} ${sale.street ?? ''}`);
-  if (!targetAddress) return null;
+// ─── Header redesign ────────────────────────────────────────────────────────
+// EPC rating + construction age band for the subject property itself (not a
+// comp sale). Land Registry sale matching uses exact paon/saon/street equality
+// because it's matching structured fields; here we only have Rightmove's
+// free-text displayAddress, so matching is a loose substring check instead.
 
-  return (
-    epcRows.find((row) => {
-      const combinedNewLines = [
-        row['addressLine1'],
-        row['addressLine2'],
-        row['addressLine3'],
-        row['addressLine4'],
-      ]
-        .filter(Boolean)
-        .join(' ');
-
-      const candidates = [
-        // New API (camelCase)
-        normalizeAddress(row['addressLine1'] as string | undefined),
-        normalizeAddress(combinedNewLines || undefined),
-        // Legacy fallbacks (old service)
-        normalizeAddress(row.address1 as string | undefined),
-        normalizeAddress(row.address as string | undefined),
-        normalizeAddress(row['address-line-1'] as string | undefined),
-      ].filter(Boolean) as string[];
-      return candidates.some((candidate) => candidate === targetAddress);
-    }) ?? null
-  );
-}
-
-async function getFloorAreaForSaleFromHomedata(sale: LandRegistrySale): Promise<number | null> {
-  if (!process.env.HOMEDATA_API_KEY) return null;
-
-  const query = [sale.paon, sale.saon, sale.street, sale.postcode].filter(Boolean).join(' ').trim();
-  if (!query) return null;
-
-  try {
-    const suggestions = await searchAddresses(query);
-    const uprn = suggestions[0]?.uprn;
-    if (!uprn) return null;
-
-    const property = await getPropertyRecord(String(uprn));
-    const area =
-      property.epc_floor_area ??
-      property.predicted_floor_area ??
-      property.internal_area_sqm;
-    const floorArea = area != null ? Number(area) : null;
-    if (!floorArea || !Number.isFinite(floorArea) || floorArea <= 0) return null;
-    return floorArea;
-  } catch (error) {
-    console.error('Homedata floor area lookup failed:', error);
-    return null;
-  }
-}
-
-// FIX: EPC fetches now run in parallel per unique postcode instead of
-// sequentially inside a for-loop. On 500 sales across ~50 unique postcodes
-// this can save 20–60 seconds.
-async function getAveragePricePerSqmForPropertyTypeAndOutcode(
-  outcode: string | null,
-  propertyTypeCode: 'D' | 'S' | 'T' | 'F' | 'O' | null
-): Promise<{ simpleAverage: number | null; weightedAverage: number | null; matchedSaleCount: number } | null> {
-  if (!outcode || !propertyTypeCode || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
-  try {
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-    const dateString = twelveMonthsAgo.toISOString().split('T')[0];
-    const prefix = outcode.toUpperCase();
-
-    const { data: sales, error } = await supabase
-      .from('price_paid_data')
-      .select('paon, saon, street, postcode, price, date_of_transfer')
-      .eq('property_type', propertyTypeCode)
-      .gte('date_of_transfer', dateString)
-      .gte('postcode', `${prefix} `)
-      .lt('postcode', `${prefix}~`)
-      .limit(500);
-
-    if (error || !sales?.length) {
-      return { simpleAverage: null, weightedAverage: null, matchedSaleCount: 0 };
-    }
-
-    // FIX: Collect all unique postcodes, fetch EPC data for all of them in
-    // parallel, then build the cache map — replaces the sequential for-loop fetch.
-    const uniquePostcodes = [...new Set(sales.map(s => s.postcode?.toUpperCase?.()).filter(Boolean))] as string[];
-    const epcResults = await Promise.all(uniquePostcodes.map(pc => fetchEpcRowsForPostcode(pc)));
-    const epcCache = new Map<string, any[]>(uniquePostcodes.map((pc, i) => [pc, epcResults[i]]));
-
-    const floorAreaBySale = new Map<string, number>();
-    const homedataCandidates: LandRegistrySale[] = [];
-
-    // ─── EPC MIGRATION ───────────────────────────────────────────────────────
-    // Two-step EPC lookup:
-    //   1. Match each sale to an EPC search row (address match).
-    //   2. Fast path: if the search row already carries floor area (old service,
-    //      or a future search-schema change), use it — no extra call.
-    //   3. Otherwise take the row's certificateNumber and queue a certificate
-    //      lookup, which is where the new service exposes floor area.
-    // Anything that can't be resolved falls through to the Homedata lookup.
-    type CertTarget = { saleKey: string; sale: LandRegistrySale; certificateNumber: string };
-    const certTargets: CertTarget[] = [];
-
-    for (const sale of sales) {
-      const price = Number(sale.price);
-      if (!Number.isFinite(price) || price <= 0) continue;
-
-      const salePostcode = sale.postcode?.toUpperCase?.() ?? null;
-      if (!salePostcode) continue;
-
-      const epcRows = epcCache.get(salePostcode);
-      const matchingRow = epcRows?.length ? matchEpcRowForSale(sale, epcRows) : null;
-
-      if (!matchingRow) {
-        homedataCandidates.push(sale);
-        continue;
-      }
-
-      // Fast path — search row already has floor area inline.
-      const inlineFloorArea = floorAreaFromEpcRow(matchingRow);
-      if (inlineFloorArea !== null) {
-        floorAreaBySale.set(saleLookupKey(sale), inlineFloorArea);
-        continue;
-      }
-
-      // New service — queue a certificate lookup using the row's certificate number.
-      const certificateNumber =
-        (matchingRow['certificateNumber'] as string | undefined) ??
-        (matchingRow['certificate-number'] as string | undefined) ??
-        (matchingRow['certificateNumber'.toLowerCase()] as string | undefined);
-      if (certificateNumber) {
-        certTargets.push({ saleKey: saleLookupKey(sale), sale, certificateNumber });
-      } else {
-        homedataCandidates.push(sale);
-      }
-    }
-
-    // Fetch floor area from the certificate endpoint. Deduped by certificate
-    // number and run with bounded concurrency to respect the API's rate limits.
-    // Cap the number of lookups per report; overflow falls back to Homedata.
-    const certLookupTargets = certTargets.slice(0, EPC_CERTIFICATE_LOOKUP_LIMIT);
-    for (const overflow of certTargets.slice(EPC_CERTIFICATE_LOOKUP_LIMIT)) {
-      homedataCandidates.push(overflow.sale);
-    }
-
-    const uniqueCertNumbers = [...new Set(certLookupTargets.map(t => t.certificateNumber))];
-    const certFloorAreas = await mapWithConcurrency(
-      uniqueCertNumbers,
-      EPC_CERTIFICATE_LOOKUP_CONCURRENCY,
-      async (certNumber) => ({ certNumber, floorArea: await fetchCertificateFloorArea(certNumber) })
-    );
-    const floorAreaByCert = new Map<string, number | null>(
-      certFloorAreas.map(r => [r.certNumber, r.floorArea])
-    );
-
-    for (const target of certLookupTargets) {
-      const floorArea = floorAreaByCert.get(target.certificateNumber) ?? null;
-      if (floorArea !== null) {
-        floorAreaBySale.set(target.saleKey, floorArea);
-      } else {
-        // Certificate had no usable floor area → try Homedata as a last resort.
-        homedataCandidates.push(target.sale);
-      }
-    }
-
-    const homedataTargets = homedataCandidates.slice(0, HOMEDATA_FLOOR_AREA_LOOKUP_LIMIT);
-    const homedataResults = await mapWithConcurrency(homedataTargets, HOMEDATA_LOOKUP_CONCURRENCY, async (sale) => ({
-      key: saleLookupKey(sale),
-      floorArea: await getFloorAreaForSaleFromHomedata(sale),
-    }));
-
-    for (const result of homedataResults) {
-      if (result.floorArea !== null) {
-        floorAreaBySale.set(result.key, result.floorArea);
-      }
-    }
-
-    let sum = 0;
-    let count = 0;
-    let weightedNumerator = 0;
-    let weightedDenominator = 0;
-
-    for (const sale of sales) {
-      const price = Number(sale.price);
-      if (!Number.isFinite(price) || price <= 0) continue;
-
-      const floorArea = floorAreaBySale.get(saleLookupKey(sale));
-      if (floorArea === undefined) continue;
-
-      const pricePerSqm = price / floorArea;
-      sum += pricePerSqm;
-      count += 1;
-      weightedNumerator += price;
-      weightedDenominator += floorArea;
-    }
-
-    if (count === 0) return { simpleAverage: null, weightedAverage: null, matchedSaleCount: 0 };
-
-    return {
-      simpleAverage: sum / count,
-      weightedAverage: weightedDenominator > 0 ? weightedNumerator / weightedDenominator : null,
-      matchedSaleCount: count,
-    };
-  } catch (error) {
-    console.error('Error calculating price per sqm stats:', error);
-    return null;
-  }
-}
-
-async function getSalesCountPast12Months(fullPostcode: string | null): Promise<number | null> {
+async function getSalesCountPast12Months(fullPostcode: string | null, effectiveToday: Date): Promise<number | null> {
   if (!fullPostcode || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
   try {
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-    const twelveMonthsAgo = new Date();
+    const twelveMonthsAgo = new Date(effectiveToday);
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
     const { count, error } = await supabase
       .from('price_paid_data')
@@ -819,6 +736,7 @@ async function getPostcodeCoordinates(postcode: string): Promise<{ latitude: num
 // ─── Main route ─────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const requestStartedAt = Date.now();
   try {
     const missingApiKeys = [
       !process.env.APIFY_API_TOKEN && 'APIFY_API_TOKEN',
@@ -879,6 +797,10 @@ export async function POST(request: NextRequest) {
       includeNearestSchools: true,
       monitoringMode: false,
       maxProperties: 1,
+      // UK residential proxy: in a 20-pair test (Oct 2026) it cut slow runs (>18s) from
+      // 25% to 10% and the worst case from ~39s to ~24s vs the default datacenter proxy,
+      // at no extra cost (this actor bills per property; proxy usage isn't passed on).
+      proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: 'GB' },
     });
 
     let runFinished = false;
@@ -911,36 +833,130 @@ export async function POST(request: NextRequest) {
     //   Batch 1 — things that don't depend on each other at all
     //   Batch 2 — things that need the postcode from batch 1
 
-    const apifyAmenities: ApifyAmenityFallback = {
+    // §04's full Overpass lookup is fetched client-side after the report renders
+    // (see useNearbyPlaces) — it can stall 10+ seconds on a slow or rate-limited
+    // endpoint. Only the listing's own schools/stations go out with the report:
+    // free (already in the scrape) and a fallback for when Overpass is down.
+    const nearbyPlaces = nearbyPlacesFromApify({
       nearestStations: propertyData.nearestStations,
       nearestSchools: propertyData.nearestSchools,
-    };
+    });
 
-    const [housePostcode, nearbyPlaces, postcodeCoords, area, planningConstraints, crimeSummary, environmentData] = await Promise.all([
+    const [housePostcode, postcodeCoords, area, effectiveToday] = await Promise.all([
       propertyLat && propertyLon
         ? getPostcodeFromCoordinates(propertyLat, propertyLon)
         : Promise.resolve({ fullPostcode: null, outcode: null, region: null, country: null }),
-      getAllNearbyPlaces(propertyLat, propertyLon, apifyAmenities),
       getPostcodeCoordinates(postcode || ''),
       getArea(propertyData, propertyData.floorplans, propertyData.description, openai),
-      fetchPlanningConstraints(propertyLat, propertyLon),
-      fetchCrimeSummary(propertyLat, propertyLon),
-      fetchEnvironmentData(propertyLat, propertyLon),
+      getPricePaidDataEffectiveToday(),
     ]);
 
-    // Batch 2 — needs housePostcode from batch 1
-    const [salesCountPast12Months, averagePriceData, pricePerSqmStats, matchedFullAddress, broadbandCoverage] = await Promise.all([
-      getSalesCountPast12Months(housePostcode.fullPostcode),
-      getAveragePricesByYear(housePostcode.outcode, propertyTypeCode),
-      getAveragePricePerSqmForPropertyTypeAndOutcode(housePostcode.outcode, propertyTypeCode),
+    // Rightmove's coordinates are often offset slightly from the real address, so
+    // the postcode reverse-geocoded from them can land on a neighbour (e.g. HU10 7AB
+    // for a listing at HU10 7AD) — and every exact-postcode lookup below then misses.
+    // The listing's own postcode wins whenever it has one.
+    const subjectPostcode = listingPostcode(propertyData) ?? housePostcode.fullPostcode;
+    const subjectOutcode = subjectPostcode?.split(' ')[0] ?? housePostcode.outcode;
+
+    // Batch 2 — needs the postcode from batch 1
+    // NOTE: the £/m² district-average stat used to be computed here too, but it
+    // was by far the most expensive thing in this handler (up to 500 sales each
+    // needing a floor area resolved via EPC/Homedata, concurrency-capped — Sentry
+    // traces showed this alone commonly taking 10-50s+, occasionally pushing the
+    // whole request past its 60s timeout). It's now fetched client-side after the
+    // report renders instead, via /api/price-per-sqm — same reason district
+    // comparison, supply & demand and risks & restrictions are already out here.
+    const [salesCountPast12Months, averagePriceData, matchedFullAddress, subjectEpcRow] = await Promise.all([
+      getSalesCountPast12Months(subjectPostcode, effectiveToday),
+      getAveragePricesByYear(subjectOutcode, propertyTypeCode),
       getFullAddressFromLandRegistrySparql(
-        housePostcode.fullPostcode,
-        housePostcode.outcode,
+        subjectPostcode,
+        subjectOutcode,
         priceHistory,
         propertyData.displayAddress || ''
       ),
-      fetchBroadbandCoverage(housePostcode.fullPostcode),
+      matchSubjectEpcRow(subjectPostcode, propertyData.displayAddress || ''),
     ]);
+
+    // Rightmove's raw displayAddress sometimes has no house number at all (e.g.
+    // "Hopwood Bank, Horsforth, Leeds" with no "9"), which leaves the street-only
+    // match ambiguous across every EPC certificate on that street — correctly
+    // returns null rather than guessing. The Land Registry SPARQL match above
+    // often resolves the full "9, Hopwood Bank, ..." address from price/date
+    // history instead, so retry the EPC match with that once it's available.
+    let resolvedSubjectEpcRow = subjectEpcRow;
+    if (!resolvedSubjectEpcRow && matchedFullAddress && matchedFullAddress !== propertyData.displayAddress) {
+      resolvedSubjectEpcRow = await matchSubjectEpcRow(subjectPostcode, matchedFullAddress);
+    }
+
+    // Both the SPARQL match and the EPC-register match above came up empty — try the
+    // EPC-image actor as a last resort (sequential, since it's only worth the extra
+    // latency when the free paths have already failed). This route has a hard 60s
+    // function timeout (maxDuration above) and the Apify scrape alone can already eat
+    // most of that, so only attempt this with real time left, and cap its own wait to
+    // whatever's left — never let it be the thing that times out the whole report.
+    const MIN_EPC_FINDER_BUDGET_SECS = 15;
+    const RESPONSE_OVERHEAD_SECS = 3;
+    let epcFinderFullAddress: string | null = null;
+    if (!matchedFullAddress && !resolvedSubjectEpcRow) {
+      const elapsedSecs = (Date.now() - requestStartedAt) / 1000;
+      const remainingSecs = 60 - elapsedSecs - RESPONSE_OVERHEAD_SECS;
+      if (remainingSecs >= MIN_EPC_FINDER_BUDGET_SECS) {
+        epcFinderFullAddress = await getFullAddressFromEpcFinderActor(
+          apifyClient,
+          propertyData.outcode || null,
+          propertyData.incode || null,
+          propertyData.propertyType || null,
+          typeof propertyData.epc === 'string' ? propertyData.epc : null,
+          Math.floor(remainingSecs)
+        );
+        if (epcFinderFullAddress) {
+          resolvedSubjectEpcRow = await matchSubjectEpcRow(subjectPostcode, epcFinderFullAddress);
+        }
+      }
+    }
+
+    const epcMatchedAddress = resolvedSubjectEpcRow
+      ? composeEpcAddress(resolvedSubjectEpcRow, propertyData.displayAddress || '')
+      : null;
+    const subjectEpc = await subjectEpcDetailsFromRow(resolvedSubjectEpcRow);
+
+    // Register lookup found no certificate at all (most often: Rightmove's address had
+    // no house number to disambiguate between several on the same street). Rightmove's
+    // own EPC chart image for this exact listing needs no address matching, so it's a
+    // last-resort fallback for the rating alone — age band and floor area still depend
+    // on the register lookup above.
+    let epcRating = subjectEpc?.currentEnergyRating ?? null;
+    if (!epcRating && typeof propertyData.epc === 'string' && propertyData.epc) {
+      epcRating = await extractEpcBandFromImage(propertyData.epc, openai);
+    }
+
+    const tenure = normalizeTenure(propertyData.tenure);
+
+    // Floor area priority when Rightmove's own data (structured size, dedicated
+    // floorplan, or description — all tried in getArea above) comes up empty:
+    // 1. The EPC register certificate's recorded floor area — an authoritative
+    //    figure, already resolved above as part of address matching.
+    // 2. Only if that's also unavailable, a guess at the LAST photo in the regular
+    //    gallery, in case the agent uploaded the floorplan there instead of using
+    //    Rightmove's dedicated floorplan slot (confirmed to happen — see the
+    //    Bowness Avenue case). extractAreaFromFloorplan abstains ("NOT_FOUND")
+    //    when nothing's explicitly labelled, so this costs one vision call and
+    //    falls through safely if the last photo isn't actually a floorplan.
+    const epcFloorArea = subjectEpc?.totalFloorArea ?? null;
+    let resolvedArea = area;
+    if (resolvedArea === 'N/A') {
+      if (epcFloorArea !== null) {
+        resolvedArea = epcFloorArea.toString();
+      } else {
+        const images = Array.isArray(propertyData.images) ? propertyData.images : [];
+        const lastImageUrl = images[images.length - 1];
+        if (typeof lastImageUrl === 'string') {
+          const lastImageArea = await extractAreaFromFloorplan(lastImageUrl, openai);
+          if (lastImageArea) resolvedArea = lastImageArea;
+        }
+      }
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -950,13 +966,16 @@ export async function POST(request: NextRequest) {
         : null;
 
     const result = {
+      rightmoveUrl: url || null,
       propertyAddress: propertyData.displayAddress || 'N/A',
-      fullAddress: matchedFullAddress || propertyData.displayAddress || 'N/A',
+      // The finder actor's string is just line 1 ("61 King Edward Crescent"); the
+      // EPC row it resolved to (when it did) composes the fuller address.
+      fullAddress: matchedFullAddress || epcMatchedAddress || epcFinderFullAddress || propertyData.displayAddress || 'N/A',
       price: propertyData.price || 'N/A',
       propertyType: propertyData.propertyType || 'N/A',
       bathrooms: propertyData.bathrooms?.toString() || 'N/A',
       bedrooms: propertyData.bedrooms?.toString() || 'N/A',
-      area,
+      area: resolvedArea,
       timeOnMarket: propertyData.firstVisibleDate
         ? new Date(propertyData.firstVisibleDate as string).toLocaleDateString()
         : 'N/A',
@@ -970,19 +989,16 @@ export async function POST(request: NextRequest) {
       preferredLongitude: postcodeCoords.longitude?.toString() || null,
       preferredPostcode: postcode || null,
       distance: distance !== null ? distance.toFixed(2) : null,
-      houseFullPostcode: housePostcode.fullPostcode,
-      houseOutcode: housePostcode.outcode,
+      houseFullPostcode: subjectPostcode,
+      houseOutcode: subjectOutcode,
       nearbyPlaces,
-      planningConstraints,
-      crimeSummary,
-      broadbandCoverage,
-      environmentData,
       salesCountPast12Months,
       averagePriceByYear: averagePriceData?.yearlyAverages ?? null,
       averagePriceFiveYear: averagePriceData?.overallAverage ?? null,
-      averagePricePerSqm: pricePerSqmStats?.weightedAverage ?? null,
-      averagePricePerSqmSimple: pricePerSqmStats?.simpleAverage ?? null,
-      averagePricePerSqmMatchedSaleCount: pricePerSqmStats?.matchedSaleCount ?? 0,
+      epcRating,
+      constructionAgeBand: subjectEpc?.constructionAgeBand ?? null,
+      epcFloorArea,
+      tenure,
     };
 
     // Increment usage counter for non-Pro users with a report allowance
@@ -996,7 +1012,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(result);
+    // Persist the report (report_version 2 = the redesigned layout). Best-effort: a save
+    // failure must never break report generation for the user.
+    let savedReportId: number | null = null;
+    try {
+      const { data: savedReport, error: saveError } = await supabaseAdmin
+        .from('saved_reports')
+        .insert({ user_id: user.id, property_url: url || null, report_data: result, report_version: 2 })
+        .select('id')
+        .single();
+      if (saveError) {
+        console.error('Failed to save report:', saveError);
+      } else {
+        savedReportId = savedReport?.id ?? null;
+      }
+    } catch (error) {
+      console.error('Failed to save report:', error);
+    }
+
+    return NextResponse.json({ ...result, savedReportId });
   } catch (error: any) {
     console.error('Error scraping property:', error);
     return NextResponse.json(

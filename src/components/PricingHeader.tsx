@@ -13,9 +13,9 @@ export const PricingHeader = ({
   selectedFrequency: string;
   onFrequencyChange: (frequency: string) => void;
 }) => (
-  <div className="space-y-7 text-center font-sans">
+  <div className="space-y-7 text-center">
     <div className="space-y-4">
-      <h1 className="text-4xl font-medium md:text-5xl text-black font-sans" style={{ color: '#000000' }}>{title}</h1>
+      <h1 className="text-4xl font-medium md:text-5xl text-black" style={{ color: '#000000', fontFamily: 'var(--font-report-display)' }}>{title}</h1>
       <p className="text-gray-600" style={{ color: '#000000' }}>{subtitle}</p>
     </div>
     {frequencies.length > 1 && (

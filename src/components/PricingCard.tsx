@@ -23,12 +23,13 @@ export const PricingCard = ({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-8 overflow-hidden rounded-2xl border p-6 shadow font-sans",
+        "relative flex flex-col gap-8 overflow-hidden rounded-2xl border p-6 shadow",
         isHighlighted
           ? "bg-gray-100 text-black border-gray-300"
           : "bg-white text-black border-gray-200",
         isPopular && "outline outline-[#0A369D]/40",
       )}
+      style={{ fontFamily: 'var(--font-report-body)' }}
     >
       {/* Background Decoration */}
       {isHighlighted && <HighlightedBackground />}

@@ -48,7 +48,7 @@ function CheckoutSuccessContent() {
 
 export default function CheckoutSuccessPage() {
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-[#FBFAF7] flex flex-col">
       <Navbar />
       <Suspense
         fallback={

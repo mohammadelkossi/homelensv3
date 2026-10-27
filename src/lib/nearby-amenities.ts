@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-export type NearbyPlace = { name: string; distance: number; rating?: string };
+export type NearbyPlace = { name: string; distance: number; rating?: string; ratingSource?: "CQC" | "Ofsted" };
 
 export type NearbyPlacesResult = {
   schools: NearbyPlace[];
@@ -54,7 +54,7 @@ const OVERPASS_ENDPOINTS = [
 ];
 const OVERPASS_TIMEOUT_MS = 12_000;
 
-export const REPORT_NEARBY_PLACES_STORAGE_KEY = "homelens_report_nearby_places";
+const REPORT_NEARBY_PLACES_STORAGE_PREFIX = "homelens_report_nearby_places:";
 
 function toRadians(degrees: number): number {
   return degrees * (Math.PI / 180);
@@ -125,33 +125,40 @@ function buildOverpassQueries(latitude: number, longitude: number, radiusMeters:
   ];
 }
 
+async function fetchOverpassFromEndpoint(endpoint: string, body: string): Promise<OverpassElement[]> {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "HomeLens/1.0 (property report amenities)",
+    },
+    body,
+    cache: "no-store",
+    signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new Error(`Overpass API error: ${endpoint} ${response.status}`);
+  }
+  const data = await response.json();
+  if (!Array.isArray(data.elements)) {
+    throw new Error(`Overpass API returned no elements: ${endpoint}`);
+  }
+  return data.elements;
+}
+
+// Races every configured endpoint at once and uses whichever responds
+// successfully first — previously these were tried one at a time, each given
+// the full timeout before falling back, so a slow/unhealthy primary endpoint
+// meant waiting out its entire timeout before the (likely healthy) backup
+// even got a chance. Traced in Sentry: that alone added ~12s to a report.
 async function fetchOverpassQuery(query: string): Promise<OverpassElement[]> {
   const body = `data=${encodeURIComponent(query)}`;
-
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "HomeLens/1.0 (property report amenities)",
-        },
-        body,
-        cache: "no-store",
-        signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
-      });
-      if (!response.ok) {
-        console.error("Overpass API error:", endpoint, response.status);
-        continue;
-      }
-      const data = await response.json();
-      if (Array.isArray(data.elements)) return data.elements;
-    } catch (error) {
-      console.error("Overpass fetch failed:", endpoint, error);
-    }
+  try {
+    return await Promise.any(OVERPASS_ENDPOINTS.map((endpoint) => fetchOverpassFromEndpoint(endpoint, body)));
+  } catch (error) {
+    console.error("All Overpass endpoints failed:", error);
+    return [];
   }
-
-  return [];
 }
 
 export async function fetchOverpassAmenities(
@@ -289,6 +296,7 @@ export async function fetchNhsLocations(
         name: row.name,
         distance: calculateDistanceKm(latitude, longitude, row.latitude, row.longitude),
         rating: row.overall_rating ?? undefined,
+        ratingSource: "CQC",
       };
       if (row.category === "hospital") buckets.hospitals.push(place);
       else if (row.category === "gp_surgery") buckets.gpSurgeries.push(place);
@@ -353,6 +361,7 @@ export async function fetchNurseries(
         name: row.name as string,
         distance: calculateDistanceKm(latitude, longitude, row.latitude as number, row.longitude as number),
         rating: row.overall_rating ?? undefined,
+        ratingSource: "Ofsted" as const,
       }));
 
     return takeNearestPlaces(places, 3);
@@ -536,24 +545,21 @@ export function nearbyPlacesToAmenityList(places: NearbyPlacesResult): Array<{
   return amenities;
 }
 
-export function readStoredNearbyPlaces(): NearbyPlacesResult | null {
+/** Keyed by location (not a single global slot) so switching reports in the same tab can't show a previous property's nearby places while the fresh fetch is in flight. */
+export function readStoredNearbyPlaces(key: string): NearbyPlacesResult | null {
   if (typeof window === "undefined") return null;
-  const raw = sessionStorage.getItem(REPORT_NEARBY_PLACES_STORAGE_KEY);
+  const storageKey = REPORT_NEARBY_PLACES_STORAGE_PREFIX + key;
+  const raw = sessionStorage.getItem(storageKey);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as NearbyPlacesResult;
   } catch {
-    sessionStorage.removeItem(REPORT_NEARBY_PLACES_STORAGE_KEY);
+    sessionStorage.removeItem(storageKey);
     return null;
   }
 }
 
-export function storeNearbyPlaces(places: NearbyPlacesResult): void {
+export function storeNearbyPlaces(key: string, places: NearbyPlacesResult): void {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(REPORT_NEARBY_PLACES_STORAGE_KEY, JSON.stringify(places));
-}
-
-export function clearStoredNearbyPlaces(): void {
-  if (typeof window === "undefined") return;
-  sessionStorage.removeItem(REPORT_NEARBY_PLACES_STORAGE_KEY);
+  sessionStorage.setItem(REPORT_NEARBY_PLACES_STORAGE_PREFIX + key, JSON.stringify(places));
 }

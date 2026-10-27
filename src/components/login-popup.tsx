@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { X } from "lucide-react"
 import posthog from "posthog-js"
+import { interBody, interTight } from "@/app/results/report-fonts"
+
+// Same black, square-cornered buttons as the navbar.
+const PRIMARY_BUTTON_CLASS = "rounded-none bg-[#0B0B0C] hover:bg-[#2A2A2E] text-white h-[40px] px-6 text-[14px] font-medium border border-[#0B0B0C] shadow-none"
+const SECONDARY_BUTTON_CLASS = "rounded-none bg-white hover:bg-[#F4F4F5] text-[#0B0B0C] hover:text-[#0B0B0C] h-[40px] px-6 text-[14px] font-medium border border-[#0B0B0C] shadow-none focus-visible:ring-[#0A369D]/50"
 
 type LoginPopupContextType = {
   open: boolean
@@ -57,7 +62,7 @@ function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => vo
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" aria-hidden onClick={onClose} />
-      <Card className="relative z-10 w-full max-w-xl px-8 py-10 shadow-lg">
+      <Card className="relative z-10 w-full max-w-xl rounded-none px-8 py-10 shadow-lg">
         <CardHeader className="p-0 pb-7">
           <CardTitle className="text-2xl">
             Upgrade to Pro to continue
@@ -68,7 +73,7 @@ function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => vo
         </CardHeader>
         <CardFooter className="flex flex-col gap-4 p-0 pt-7">
           <Button
-            className="h-12 w-full text-base bg-[#0A369D] hover:bg-[#082e83]"
+            className={`${PRIMARY_BUTTON_CLASS} h-12 w-full text-base`}
             onClick={() => {
               posthog.capture("upgrade_to_pro_clicked", { source: "limit_popup" })
               onClose()
@@ -77,7 +82,7 @@ function UpgradeLimitPopup({ open, onClose }: { open: boolean; onClose: () => vo
           >
             Upgrade to Pro
           </Button>
-          <Button variant="ghost" onClick={onClose} className="h-12 w-full text-base text-muted-foreground">
+          <Button variant="ghost" onClick={onClose} className="h-12 w-full rounded-none text-base text-muted-foreground">
             Maybe later
           </Button>
         </CardFooter>
@@ -227,7 +232,8 @@ function LoginPopup({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 ${interBody.variable} ${interTight.variable}`}
+      style={{ fontFamily: "var(--font-report-body)" }}
       aria-modal="true"
       role="dialog"
       aria-labelledby={mode === "forgot" ? "forgot-title" : mode === "login" ? "login-title" : "signup-title"}
@@ -240,10 +246,14 @@ function LoginPopup({
         onClick={closePopup}
       />
       {/* Card */}
-      <Card className="relative z-10 w-full max-w-md bg-white shadow-lg">
+      <Card className="relative z-10 w-full max-w-md rounded-none bg-white shadow-lg">
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle id={mode === "forgot" ? "forgot-title" : mode === "login" ? "login-title" : "signup-title"} className="text-xl">
+            <CardTitle
+              id={mode === "forgot" ? "forgot-title" : mode === "login" ? "login-title" : "signup-title"}
+              className="text-xl"
+              style={{ fontFamily: "var(--font-report-display)", fontWeight: 400 }}
+            >
               {mode === "forgot" ? "Reset password" : mode === "login" ? "Log in" : "Create account"}
             </CardTitle>
             <CardDescription>
@@ -256,7 +266,7 @@ function LoginPopup({
           </div>
           <button
             type="button"
-            className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
             aria-label="Close"
             onClick={closePopup}
           >
@@ -267,17 +277,17 @@ function LoginPopup({
           {mode === "forgot" ? (
             forgotSuccess ? (
               <div className="space-y-3">
-                <p className="text-sm text-green-700 bg-green-50 p-3 rounded-md">
+                <p className="text-sm text-green-700 bg-green-50 p-3">
                   Check your email for a link to reset your password.
                 </p>
-                <Button type="button" onClick={closePopup} className="w-full bg-[#0A369D] hover:bg-[#082e83]">
+                <Button type="button" onClick={closePopup} className={`w-full ${PRIMARY_BUTTON_CLASS}`}>
                   Close
                 </Button>
               </div>
             ) : (
               <form onSubmit={handleForgotPassword} className="space-y-4">
                 {forgotError && (
-                  <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{forgotError}</p>
+                  <p className="text-sm text-red-600 bg-red-50 p-2">{forgotError}</p>
                 )}
                 <div className="space-y-2">
                   <label htmlFor="forgot-email" className="text-sm font-medium text-gray-700">Email</label>
@@ -285,17 +295,17 @@ function LoginPopup({
                     id="forgot-email"
                     type="email"
                     placeholder="you@example.com"
-                    className="w-full"
+                    className="w-full rounded-none"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     required
                   />
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  <Button type="button" variant="outline" onClick={() => { setMode("login"); setForgotError(null); }}>
+                  <Button type="button" variant="outline" className={SECONDARY_BUTTON_CLASS} onClick={() => { setMode("login"); setForgotError(null); }}>
                     Back to log in
                   </Button>
-                  <Button type="submit" disabled={forgotLoading} className="bg-[#0A369D] hover:bg-[#082e83]">
+                  <Button type="submit" disabled={forgotLoading} className={PRIMARY_BUTTON_CLASS}>
                     {forgotLoading ? "Sending…" : "Send reset link"}
                   </Button>
                 </div>
@@ -304,7 +314,7 @@ function LoginPopup({
           ) : mode === "login" ? (
             <form onSubmit={handleLogin} className="space-y-4">
               {loginError && (
-                <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{loginError}</p>
+                <p className="text-sm text-red-600 bg-red-50 p-2">{loginError}</p>
               )}
               <div className="space-y-2">
                 <label htmlFor="login-email" className="text-sm font-medium text-gray-700">Email</label>
@@ -312,7 +322,7 @@ function LoginPopup({
                   id="login-email"
                   type="email"
                   placeholder="you@example.com"
-                  className="w-full"
+                  className="w-full rounded-none"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   required
@@ -333,32 +343,32 @@ function LoginPopup({
                   id="login-password"
                   type="password"
                   placeholder="••••••••"
-                  className="w-full"
+                  className="w-full rounded-none"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   required
                 />
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                <Button type="button" variant="outline" onClick={closePopup}>Cancel</Button>
-                <Button type="submit" disabled={loginLoading} className="bg-[#0A369D] hover:bg-[#082e83]">
+                <Button type="button" variant="outline" className={SECONDARY_BUTTON_CLASS} onClick={closePopup}>Cancel</Button>
+                <Button type="submit" disabled={loginLoading} className={PRIMARY_BUTTON_CLASS}>
                   {loginLoading ? "Logging in…" : "Log in"}
                 </Button>
               </div>
             </form>
           ) : signupSuccess ? (
             <div className="space-y-3">
-              <p className="text-sm text-green-700 bg-green-50 p-3 rounded-md">
+              <p className="text-sm text-green-700 bg-green-50 p-3">
                 Account created.
               </p>
-              <Button type="button" onClick={closePopup} className="w-full bg-[#0A369D] hover:bg-[#082e83]">
+              <Button type="button" onClick={closePopup} className={`w-full ${PRIMARY_BUTTON_CLASS}`}>
                 Close
               </Button>
             </div>
           ) : (
             <>
               {signupError && (
-                <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md">{signupError}</p>
+                <p className="text-sm text-red-600 bg-red-50 p-2">{signupError}</p>
               )}
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">
@@ -367,7 +377,7 @@ function LoginPopup({
                     id="signup-name"
                     type="text"
                     placeholder="Your name"
-                    className="w-full"
+                    className="w-full rounded-none"
                     value={signupName}
                     onChange={(e) => setSignupName(e.target.value)}
                     required
@@ -379,7 +389,7 @@ function LoginPopup({
                     id="signup-email"
                     type="email"
                     placeholder="you@example.com"
-                    className="w-full"
+                    className="w-full rounded-none"
                     value={signupEmail}
                     onChange={(e) => setSignupEmail(e.target.value)}
                     required
@@ -391,7 +401,7 @@ function LoginPopup({
                     id="signup-password"
                     type="password"
                     placeholder="••••••••"
-                    className="w-full"
+                    className="w-full rounded-none"
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
                     required
@@ -404,7 +414,7 @@ function LoginPopup({
                     id="signup-confirm"
                     type="password"
                     placeholder="••••••••"
-                    className="w-full"
+                    className="w-full rounded-none"
                     value={signupConfirm}
                     onChange={(e) => setSignupConfirm(e.target.value)}
                     required
@@ -422,8 +432,8 @@ function LoginPopup({
                   <span>I agree to receive marketing emails from HomeLens.</span>
                 </label>
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  <Button type="button" variant="outline" onClick={closePopup}>Cancel</Button>
-                  <Button type="submit" disabled={signupLoading} className="bg-[#0A369D] hover:bg-[#082e83]">
+                  <Button type="button" variant="outline" className={SECONDARY_BUTTON_CLASS} onClick={closePopup}>Cancel</Button>
+                  <Button type="submit" disabled={signupLoading} className={PRIMARY_BUTTON_CLASS}>
                     {signupLoading ? "Creating…" : "Create account"}
                   </Button>
                 </div>

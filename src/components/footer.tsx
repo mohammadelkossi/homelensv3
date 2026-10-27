@@ -6,7 +6,7 @@ import { useLoginPopup } from "@/components/login-popup"
 export function Footer() {
   const { openLogin } = useLoginPopup()
   return (
-    <footer className="bg-white text-black">
+    <footer className="bg-[#FBFAF7] text-black">
       <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-10">
         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-8">
           {/* Logo */}
@@ -34,7 +34,7 @@ export function Footer() {
               Accessibility
             </Link>
             <p className="text-sm m-0 whitespace-nowrap order-last sm:order-none">
-              © 2025 HomeLens. All rights reserved.
+              © 2026 HomeLens. All rights reserved.
             </p>
           </div>
         </div>

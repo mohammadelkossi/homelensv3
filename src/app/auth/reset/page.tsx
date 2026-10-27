@@ -129,14 +129,14 @@ export default function AuthResetPage() {
 
   if (isRecovery === null) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#FBFAF7] flex items-center justify-center">
         <p className="text-gray-500">Loading...</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-[#FBFAF7] flex flex-col">
       <Navbar />
       <main className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">

@@ -118,3 +118,19 @@
   font-weight: 700 !important;
 }
 
+
+/* Site-wide promo banner: the track holds two identical sets, so moving it by half loops seamlessly. */
+@keyframes promo-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.promo-marquee-track {
+  animation: promo-marquee 60s linear infinite;
+}
+.promo-marquee:hover .promo-marquee-track,
+.promo-marquee:focus-visible .promo-marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .promo-marquee-track { animation: none; }
+}

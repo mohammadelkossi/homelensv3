@@ -63,7 +63,7 @@ export const Pricing = () => {
   };
 
   return (
-    <section className="flex flex-col items-center gap-10 py-10 font-sans" style={{ backgroundColor: "transparent" }}>
+    <section className="flex flex-col items-center gap-10 py-10" style={{ backgroundColor: "transparent", fontFamily: 'var(--font-report-body)' }}>
       <PricingHeader
         title="Plans and Pricing"
         subtitle="Subscribe monthly or pay once for lifetime Pro access."

@@ -15,11 +15,8 @@ import {
   readPendingReportPayload,
   type PendingReportPayload,
 } from "@/lib/report-generation"
-import { storeNearbyPlaces } from "@/lib/nearby-amenities"
-import { storePlanningConstraints } from "@/lib/planning-constraints"
-import { storeCrimeSummary } from "@/lib/crime-data"
-import { storeBroadbandCoverage } from "@/lib/broadband-coverage"
-import { storeEnvironmentData } from "@/lib/environment-data"
+import { interBody, interTight } from "@/app/results/report-fonts"
+import { INK, MUTED, HAIRLINE, ACCENT, WARN, BODY_FONT, DISPLAY_FONT } from "@/components/tools/tool-ui"
 
 export default function GeneratingPage() {
   const router = useRouter()
@@ -31,6 +28,7 @@ export default function GeneratingPage() {
 
   const activeStage = getActiveStageIndex(elapsedSec)
   const progress = getReportProgressPercent(elapsedSec, complete)
+  const displayPercent = Math.round(progress)
 
   useEffect(() => {
     const tick = window.setInterval(() => {
@@ -77,21 +75,6 @@ export default function GeneratingPage() {
       }
 
       const data = await response.json()
-      if (data.nearbyPlaces) {
-        storeNearbyPlaces(data.nearbyPlaces)
-      }
-      if (data.planningConstraints) {
-        storePlanningConstraints(data.planningConstraints)
-      }
-      if (data.crimeSummary) {
-        storeCrimeSummary(data.crimeSummary)
-      }
-      if (data.broadbandCoverage) {
-        storeBroadbandCoverage(data.broadbandCoverage)
-      }
-      if (data.environmentData) {
-        storeEnvironmentData(data.environmentData)
-      }
       posthog.capture("report_generated", { property_url: payload.url })
       clearPendingReportPayload()
       setComplete(true)
@@ -113,75 +96,83 @@ export default function GeneratingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div
+      className={`min-h-screen bg-[#FBFAF7] flex flex-col ${interBody.variable} ${interTight.variable}`}
+      style={{ color: INK, fontFamily: BODY_FONT }}
+    >
       <Navbar />
-      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-16">
-        <div className="w-full max-w-md">
-          <h1 className="text-xl sm:text-2xl font-semibold text-center mb-2" style={{ color: "#0A369D" }}>
-            Building your report
-          </h1>
-          <p className="text-sm text-center text-gray-600 mb-10">
-            This usually takes 18–25 seconds
-          </p>
+      <main className="flex-1 px-5 md:px-12" style={{ paddingTop: 64, paddingBottom: 64 }}>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <div className="md:col-span-3">
+            <p style={{ margin: 0 }}>Building your report</p>
+          </div>
 
-          {error ? (
-            <div className="text-center space-y-4">
-              <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>
-              <button
-                type="button"
-                onClick={() => router.push("/preferences")}
-                className="text-sm font-medium text-[#0A369D] hover:underline"
-              >
-                Back to preferences
-              </button>
-            </div>
-          ) : (
-            <>
-              <ul className="space-y-4 mb-8" aria-live="polite">
-                {REPORT_GENERATION_STAGES.map((stage, index) => {
-                  const isActive = index === activeStage && !complete
-                  const isDone = index < activeStage || complete
-                  return (
-                    <li
-                      key={stage.label}
-                      className={`flex items-center gap-3 text-sm transition-colors ${
-                        isActive
-                          ? "font-semibold text-[#0A369D]"
-                          : isDone
-                            ? "text-gray-500"
-                            : "text-gray-400"
-                      }`}
-                    >
-                      <span
-                        className={`flex h-2 w-2 shrink-0 rounded-full ${
-                          isActive
-                            ? "bg-[#0A369D] animate-pulse"
-                            : isDone
-                              ? "bg-[#0A369D]/50"
-                              : "bg-gray-300"
-                        }`}
-                        aria-hidden
-                      />
-                      {stage.label}
-                    </li>
-                  )
-                })}
-              </ul>
-
-              <div
-                className="h-2.5 w-full overflow-hidden rounded-full bg-gray-200"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(progress)}
-              >
-                <div
-                  className="h-full rounded-full bg-[#0A369D] transition-[width] duration-300 ease-out"
-                  style={{ width: `${progress}%` }}
-                />
+          <div className="md:col-span-9">
+            {error ? (
+              <div>
+                <p className="text-[15px]" style={{ color: WARN }}>
+                  {error}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => router.push("/preferences")}
+                  className="mt-4 text-[14px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#0A369D]/50"
+                  style={{ color: ACCENT, textDecoration: "underline", textUnderlineOffset: 4 }}
+                >
+                  Back to preferences
+                </button>
               </div>
-            </>
-          )}
+            ) : (
+              <div aria-live="polite">
+                <div
+                  className="leading-none"
+                  style={{
+                    fontFamily: DISPLAY_FONT,
+                    fontWeight: 300,
+                    letterSpacing: "-0.045em",
+                    fontSize: "min(28vw, 200px)",
+                    color: ACCENT,
+                  }}
+                >
+                  {displayPercent}%
+                </div>
+                <p
+                  className="text-[20px] sm:text-[26px] mt-6"
+                  style={{ fontFamily: DISPLAY_FONT, fontWeight: 300, letterSpacing: "-0.02em", lineHeight: 1.3 }}
+                >
+                  {REPORT_GENERATION_STAGES[activeStage].description}
+                </p>
+
+                <div
+                  className="mt-10"
+                  style={{ height: 2, backgroundColor: HAIRLINE }}
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={displayPercent}
+                >
+                  <div style={{ height: "100%", width: `${progress}%`, backgroundColor: INK, transition: "width 300ms ease-out" }} />
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-3.5 text-[12px]">
+                  {REPORT_GENERATION_STAGES.map((stage, index) => {
+                    const isActive = index === activeStage && !complete
+                    const isDone = index < activeStage || complete
+                    return (
+                      <span key={stage.label} style={{ color: isActive ? ACCENT : isDone ? INK : MUTED }}>
+                        {stage.number} {stage.label}
+                        {isDone ? " ✓" : isActive ? "…" : ""}
+                      </span>
+                    )
+                  })}
+                </div>
+
+                <p className="text-[12px] mt-12" style={{ color: MUTED }}>
+                  This usually takes 18–25 seconds. Keep this tab open and active.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </main>
       <Footer />

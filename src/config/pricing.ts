@@ -16,6 +16,9 @@ export interface PricingTier {
   popular?: boolean;
 }
 
+/** Pro Lifetime, in GBP. Stripe charges whatever STRIPE_PRO_LIFETIME_PRICE_ID is set to: keep the two in step. */
+export const LIFETIME_PRICE = 37;
+
 const PRO_FEATURES = [
   "50 property analyses/month",
   "Smart HomeLens score (financial + lifestyle fit)",
@@ -29,26 +32,26 @@ export const TIERS: PricingTier[] = [
     name: "Pro Monthly",
     checkoutPlan: "monthly",
     price: {
-      monthly: 8,
-      yearly: 8,
+      monthly: 14,
+      yearly: 14,
     },
     priceLabel: "Per month",
     description: "Ideal for serious home buyers and investors",
     features: [...PRO_FEATURES, "Cancel anytime"],
-    cta: "Subscribe for £8/month",
+    cta: "Subscribe for £14/month",
   },
   {
     id: "pro-lifetime",
     name: "Pro Lifetime",
     checkoutPlan: "lifetime",
     price: {
-      monthly: 21,
-      yearly: 21,
+      monthly: LIFETIME_PRICE,
+      yearly: LIFETIME_PRICE,
     },
     priceLabel: "One-time payment",
     description: "Pay once, keep Pro access for life",
     features: [...PRO_FEATURES, "Lifetime access — no subscription"],
-    cta: "Get lifetime access for £21",
+    cta: `Get lifetime access for £${LIFETIME_PRICE}`,
     highlighted: true,
     popular: true,
   },

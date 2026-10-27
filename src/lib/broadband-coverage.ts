@@ -56,19 +56,22 @@ export async function fetchBroadbandCoverage(postcode: string | null | undefined
 
 export const REPORT_BROADBAND_COVERAGE_STORAGE_KEY = "homelens_report_broadband_coverage";
 
-export function readStoredBroadbandCoverage(): BroadbandCoverage | null {
+// `key` scopes the cache to one property (see useRisksRestrictions) — without it, the first
+// report generated in a tab would cache its broadband data forever and every later report in
+// that tab (almost always a different property) would silently reuse it instead of fetching.
+export function readStoredBroadbandCoverage(key: string): BroadbandCoverage | null {
   if (typeof window === "undefined") return null;
-  const raw = sessionStorage.getItem(REPORT_BROADBAND_COVERAGE_STORAGE_KEY);
+  const raw = sessionStorage.getItem(`${REPORT_BROADBAND_COVERAGE_STORAGE_KEY}:${key}`);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as BroadbandCoverage;
   } catch {
-    sessionStorage.removeItem(REPORT_BROADBAND_COVERAGE_STORAGE_KEY);
+    sessionStorage.removeItem(`${REPORT_BROADBAND_COVERAGE_STORAGE_KEY}:${key}`);
     return null;
   }
 }
 
-export function storeBroadbandCoverage(coverage: BroadbandCoverage): void {
+export function storeBroadbandCoverage(key: string, coverage: BroadbandCoverage): void {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(REPORT_BROADBAND_COVERAGE_STORAGE_KEY, JSON.stringify(coverage));
+  sessionStorage.setItem(`${REPORT_BROADBAND_COVERAGE_STORAGE_KEY}:${key}`, JSON.stringify(coverage));
 }

@@ -52,21 +52,24 @@ export function hasPlanningConstraintsContent(
 
 export const REPORT_PLANNING_CONSTRAINTS_STORAGE_KEY = "homelens_report_planning_constraints";
 
-export function readStoredPlanningConstraints(): PlanningConstraintsResult | null {
+// `key` scopes the cache to one property (see useRisksRestrictions) — without it, the first
+// report generated in a tab would cache its planning data forever and every later report in
+// that tab (almost always a different property) would silently reuse it instead of fetching.
+export function readStoredPlanningConstraints(key: string): PlanningConstraintsResult | null {
   if (typeof window === "undefined") return null;
-  const raw = sessionStorage.getItem(REPORT_PLANNING_CONSTRAINTS_STORAGE_KEY);
+  const raw = sessionStorage.getItem(`${REPORT_PLANNING_CONSTRAINTS_STORAGE_KEY}:${key}`);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as PlanningConstraintsResult;
   } catch {
-    sessionStorage.removeItem(REPORT_PLANNING_CONSTRAINTS_STORAGE_KEY);
+    sessionStorage.removeItem(`${REPORT_PLANNING_CONSTRAINTS_STORAGE_KEY}:${key}`);
     return null;
   }
 }
 
-export function storePlanningConstraints(result: PlanningConstraintsResult): void {
+export function storePlanningConstraints(key: string, result: PlanningConstraintsResult): void {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(REPORT_PLANNING_CONSTRAINTS_STORAGE_KEY, JSON.stringify(result));
+  sessionStorage.setItem(`${REPORT_PLANNING_CONSTRAINTS_STORAGE_KEY}:${key}`, JSON.stringify(result));
 }
 
 type PlanningDataEntity = {
