@@ -1,4 +1,5 @@
 import type { SupplyDemand as SupplyDemandData } from "@/lib/use-supply-demand"
+import { Locked } from "./locked"
 
 const DISPLAY_FONT = "var(--font-report-display)"
 const ACTIVE_COLOR = "#0A369D"
@@ -24,6 +25,7 @@ export function SupplyDemand({
   return (
     <div style={{ fontFamily: "var(--font-report-body)", fontSize: 14 }}>
       <div className="font-semibold">Supply & demand, {outcode ?? "this district"}</div>
+      <Locked>
       <div className="grid grid-cols-3 gap-1.5 mt-4">
         {SEGMENTS.map((segment) => {
           const active = segment.label === data.label
@@ -52,6 +54,7 @@ export function SupplyDemand({
           ? `Too few recent ${typeLabel} sales to measure on their own, so this widens to all property types in ${outcode ?? "the district"}.`
           : `Current ${typeLabel} listings vs. sales over the past 12 months, HM Land Registry and Rightmove.`}
       </p>
+      </Locked>
     </div>
   )
 }

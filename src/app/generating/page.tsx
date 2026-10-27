@@ -50,9 +50,18 @@ export default function GeneratingPage() {
     void runGeneration(payload)
   }, [router])
 
+  function showPreviewFallback(payload: PendingReportPayload, reason: string) {
+    posthog.capture("preview_fallback_shown", { property_url: payload.url, reason })
+    clearPendingReportPayload()
+    setComplete(true)
+    window.setTimeout(() => {
+      router.push("/results?previewFallback=1")
+    }, 400)
+  }
+
   async function runGeneration(payload: PendingReportPayload) {
     try {
-      const response = await fetch("/api/scrape-property", {
+      const response = await fetch(payload.preview ? "/api/preview-property" : "/api/scrape-property", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,11 +80,18 @@ export default function GeneratingPage() {
           router.back()
           return
         }
+        // A preview that couldn't read the listing (Rightmove blocked, timed out, or changed its
+        // page) still shows the locked report, built from the sample, rather than an error.
+        // A bad link (400) is the visitor's to fix, so that one still shows the error.
+        if (payload.preview && response.status !== 400) {
+          showPreviewFallback(payload, `status_${response.status}`)
+          return
+        }
         throw new Error(data.error || data.message || "Failed to generate report")
       }
 
       const data = await response.json()
-      posthog.capture("report_generated", { property_url: payload.url })
+      posthog.capture(payload.preview ? "preview_report_generated" : "report_generated", { property_url: payload.url })
       clearPendingReportPayload()
       setComplete(true)
 
@@ -84,6 +100,10 @@ export default function GeneratingPage() {
         router.push(`/results?${params.toString()}`)
       }, 400)
     } catch (err: unknown) {
+      if (payload.preview) {
+        showPreviewFallback(payload, "network_error")
+        return
+      }
       const message = err instanceof Error ? err.message : "Failed to generate report"
       posthog.capture("report_generation_failed", {
         property_url: payload.url,

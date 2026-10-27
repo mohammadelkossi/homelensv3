@@ -1,3 +1,5 @@
+import { Locked } from "./locked"
+
 const DISPLAY_FONT = "var(--font-report-display)"
 const BODY_FONT = "var(--font-report-body)"
 
@@ -14,12 +16,14 @@ function Tile({ label, value }: MustHaveItem) {
       <div className="text-[12px]" style={{ color: "#6B6B70", fontFamily: BODY_FONT }}>
         {label}
       </div>
-      <div
-        className="mt-1 text-[24px] sm:text-[28px]"
-        style={{ fontFamily: DISPLAY_FONT, fontWeight: 300, color }}
-      >
-        {text}
-      </div>
+      <Locked>
+        <div
+          className="mt-1 text-[24px] sm:text-[28px]"
+          style={{ fontFamily: DISPLAY_FONT, fontWeight: 300, color }}
+        >
+          {text}
+        </div>
+      </Locked>
     </div>
   )
 }

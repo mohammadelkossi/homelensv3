@@ -1,5 +1,6 @@
 import type { NearbyPlace } from "@/lib/nearby-amenities"
 import { ownedPercent, type CensusTenureBreakdown } from "@/lib/census-tenure"
+import { Locked } from "./locked"
 
 const DISPLAY_FONT = "var(--font-report-display)"
 
@@ -57,15 +58,17 @@ function Card({ label, headline, headlineCaption, children }: { label: string; h
       <div className="text-[12px]" style={{ color: "#6B6B70" }}>
         {label}
       </div>
-      <div className="mt-1.5 text-[26px] sm:text-[30px]" style={{ fontFamily: DISPLAY_FONT, fontWeight: 300, lineHeight: 1.1 }}>
-        {headline}
-      </div>
-      {headlineCaption ? (
-        <div className="text-[12px]" style={{ color: "#6B6B70" }}>
-          {headlineCaption}
+      <Locked>
+        <div className="mt-1.5 text-[26px] sm:text-[30px]" style={{ fontFamily: DISPLAY_FONT, fontWeight: 300, lineHeight: 1.1 }}>
+          {headline}
         </div>
-      ) : null}
-      <div className="mt-2">{children}</div>
+        {headlineCaption ? (
+          <div className="text-[12px]" style={{ color: "#6B6B70" }}>
+            {headlineCaption}
+          </div>
+        ) : null}
+        <div className="mt-2">{children}</div>
+      </Locked>
     </div>
   )
 }

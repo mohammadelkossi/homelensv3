@@ -1,5 +1,6 @@
 import type { NearestForSaleListing } from "@/lib/use-supply-demand"
 import { TABLE_COL_WIDTHS } from "./table-column-widths"
+import { Locked } from "./locked"
 
 const DISPLAY_FONT = "var(--font-report-display)"
 
@@ -40,6 +41,7 @@ export function NearestForSale({
       <p className="mt-1 mb-2" style={{ color: "#6B6B70" }}>
         Closest {typeLabel} listings currently on Rightmove.
       </p>
+      <Locked>
       <div className="w-full overflow-x-auto">
         <table className="w-full border-collapse" style={{ fontSize: 13 }}>
           <colgroup>
@@ -90,6 +92,7 @@ export function NearestForSale({
           </tbody>
         </table>
       </div>
+      </Locked>
       <p className="mt-2.5 text-[12px]" style={{ color: "#6B6B70" }}>
         Rightmove, current listings. Distance from this property.
       </p>

@@ -1,3 +1,4 @@
+import { Locked } from "./locked"
 const DISPLAY_FONT = "var(--font-report-display)"
 const BODY_FONT = "var(--font-report-body)"
 
@@ -28,6 +29,7 @@ function ScoreRow({ label, value, max }: HomeLensScoreSection) {
 export function HomeLensScore({ score, maxScore, sections }: HomeLensScoreProps) {
   return (
     <div style={{ fontFamily: BODY_FONT }}>
+      <Locked strong>
       <div className="flex items-baseline gap-1">
         <span
           className="text-[48px] sm:text-[64px]"
@@ -39,17 +41,20 @@ export function HomeLensScore({ score, maxScore, sections }: HomeLensScoreProps)
           /{maxScore}
         </span>
       </div>
+      </Locked>
       <h2
         className="mt-2.5 text-[18px] sm:text-[22px]"
         style={{ fontFamily: DISPLAY_FONT, fontWeight: 500, letterSpacing: "-0.02em", lineHeight: 1.2 }}
       >
         HomeLens score
       </h2>
-      <div className="mt-[18px]">
-        {sections.map((section) => (
-          <ScoreRow key={section.label} {...section} />
-        ))}
-      </div>
+      <Locked>
+        <div className="mt-[18px]">
+          {sections.map((section) => (
+            <ScoreRow key={section.label} {...section} />
+          ))}
+        </div>
+      </Locked>
     </div>
   )
 }

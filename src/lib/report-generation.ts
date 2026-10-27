@@ -91,6 +91,8 @@ export type PendingReportPayload = {
   locationSlider: number
   garageSlider: number
   locationLabel: string
+  /** Free preview: no Apify run, and everything but Risks & restrictions is locked. */
+  preview?: boolean
 }
 
 // Mirrors the report's own §01–§05 section numbering, so "building your report"

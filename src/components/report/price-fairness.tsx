@@ -6,6 +6,7 @@ import {
   type PricePoint,
 } from "@/lib/pricing/recommended-offer";
 import type { AiOffer } from "@/lib/key-points/offer";
+import { Locked } from "./locked"
 
 const DISPLAY_FONT = "var(--font-report-display)";
 
@@ -97,22 +98,24 @@ function Stat({
       <div className="text-[12px]" style={{ color: "#6B6B70" }}>
         {label}
       </div>
-      <div
-        className="mt-1.5 text-[36px] sm:text-[40px]"
-        style={{
-          fontFamily: DISPLAY_FONT,
-          fontWeight: 300,
-          color: color ?? "#0B0B0C",
-        }}
-      >
-        {value}
-      </div>
-      {sub ? <div className="mt-1 text-[12px]">{sub}</div> : null}
-      {caption ? (
-        <div className="text-[12px]" style={{ color: "#6B6B70" }}>
-          {caption}
+      <Locked>
+        <div
+          className="mt-1.5 text-[36px] sm:text-[40px]"
+          style={{
+            fontFamily: DISPLAY_FONT,
+            fontWeight: 300,
+            color: color ?? "#0B0B0C",
+          }}
+        >
+          {value}
         </div>
-      ) : null}
+        {sub ? <div className="mt-1 text-[12px]">{sub}</div> : null}
+        {caption ? (
+          <div className="text-[12px]" style={{ color: "#6B6B70" }}>
+            {caption}
+          </div>
+        ) : null}
+      </Locked>
     </div>
   );
 }
@@ -197,6 +200,7 @@ export function PriceFairness(props: PriceFairnessProps) {
               <div className="text-[12px]" style={{ color: "#6B6B70" }}>
                 Recommended offer
               </div>
+              <Locked strong>
               <div
                 className="mt-2 text-[48px] sm:text-[72px]"
                 style={{
@@ -238,6 +242,7 @@ export function PriceFairness(props: PriceFairnessProps) {
                 A guide based on local sales and market signals, not a formal
                 valuation. Doesn&apos;t account for condition or improvements.
               </p>
+              </Locked>
             </div>
           )}
 
@@ -246,6 +251,7 @@ export function PriceFairness(props: PriceFairnessProps) {
               <div className="text-[12px]" style={{ color: "#6B6B70" }}>
                 Seller&apos;s gain at asking price
               </div>
+              <Locked strong>
               <div
                 className="mt-2 text-[48px] sm:text-[72px]"
                 style={{
@@ -283,6 +289,7 @@ export function PriceFairness(props: PriceFairnessProps) {
                   />
                 )}
               </div>
+              </Locked>
             </div>
           ) : (
             (noGainFallback ?? null)

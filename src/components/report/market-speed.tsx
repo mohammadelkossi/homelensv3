@@ -1,5 +1,6 @@
 import type { DistrictSalesTrend, NearbySale } from "@/lib/district-comparison"
 import { TABLE_COL_WIDTHS } from "./table-column-widths"
+import { Locked } from "./locked"
 
 const DISPLAY_FONT = "var(--font-report-display)"
 
@@ -39,15 +40,17 @@ function Stat({ label, value, sub, caption }: { label: string; value: string; su
       <div className="text-[12px]" style={{ color: "#6B6B70" }}>
         {label}
       </div>
-      <div className="mt-1.5 text-[36px] sm:text-[44px]" style={{ fontFamily: DISPLAY_FONT, fontWeight: 300 }}>
-        {value}
-      </div>
-      {sub ? <div className="mt-1 text-[12px]">{sub}</div> : null}
-      {caption ? (
-        <div className="text-[12px]" style={{ color: "#6B6B70" }}>
-          {caption}
+      <Locked>
+        <div className="mt-1.5 text-[36px] sm:text-[44px]" style={{ fontFamily: DISPLAY_FONT, fontWeight: 300 }}>
+          {value}
         </div>
-      ) : null}
+        {sub ? <div className="mt-1 text-[12px]">{sub}</div> : null}
+        {caption ? (
+          <div className="text-[12px]" style={{ color: "#6B6B70" }}>
+            {caption}
+          </div>
+        ) : null}
+      </Locked>
     </div>
   )
 }
@@ -112,6 +115,7 @@ export function MarketSpeed({
           <p className="mt-1 mb-2" style={{ color: "#6B6B70" }}>
             Closest {typeLabel} sales in the last 2 years.
           </p>
+          <Locked>
           <div className="w-full overflow-x-auto">
             <table className="w-full border-collapse" style={{ fontSize: 13 }}>
               <colgroup>
@@ -165,6 +169,7 @@ export function MarketSpeed({
               </tbody>
             </table>
           </div>
+          </Locked>
           <p className="mt-2.5 text-[12px] italic" style={{ color: "#6B6B70" }}>
             HM Land Registry sold prices. There&apos;s typically a lag of a few months before a completed
             sale appears in HM Land Registry data, so the most recent sales may not show here yet.

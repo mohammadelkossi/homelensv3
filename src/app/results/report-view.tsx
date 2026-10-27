@@ -54,6 +54,10 @@ import { useNearbyPlaces } from "@/lib/use-nearby-places"
 import { hasNearbyPlacesContent } from "@/lib/nearby-amenities"
 import { buildKeyPoints, type RuleContext } from "@/lib/rules-engine"
 import { interBody, interTight } from "./report-fonts"
+import posthog from "posthog-js"
+import { Locked, PreviewLock } from "@/components/report/locked"
+import { MONTHLY_PRICE } from "@/config/pricing"
+import { SAMPLE_REPORT_QUERY, SAMPLE_REPORT_SNAPSHOT } from "@/app/sample/sample-report-snapshot"
 import { useState, useEffect, useMemo } from "react"
 
 const SHOW_HOMELENS_SCORE = process.env.NEXT_PUBLIC_SHOW_HOMELENS_SCORE === "true"
@@ -82,9 +86,66 @@ type ReportViewProps = {
   snapshot?: ReportSnapshot
 }
 
+// The header's top row in a free preview. If the listing is missing any of these, the whole
+// row is shown blurred (filled from the sample) rather than with a "—".
+const PREVIEW_SUMMARY_PARAMS = ["price", "propertyType", "bedrooms", "bathrooms"]
+
+const isMissingParam = (value: string | null) => !value || value === "N/A" || value === "null"
+
+/** True when a free preview's listing lacks any of the header's top-row facts. */
+function previewSummaryIncomplete(listing: URLSearchParams): boolean {
+  return PREVIEW_SUMMARY_PARAMS.some((key) => isMissingParam(listing.get(key)))
+}
+
+// What a free preview shows unblurred. These always come from the real listing, even
+// when it's missing a value, so a preview never shows the sample's facts as this home's.
+const PREVIEW_CLEAR_PARAMS = new Set([
+  "rightmoveUrl",
+  "propertyAddress",
+  "price",
+  "propertyType",
+  "bedrooms",
+  "bathrooms",
+  "latitude",
+  "longitude",
+  "houseFullPostcode",
+  "houseOutcode",
+])
+
+/**
+ * A free preview only reads a few facts from the listing, but every locked component should
+ * still appear (blurred). So anything the listing didn't give us is filled from the sample
+ * report. The filler is only ever shown blurred.
+ */
+function withSampleFiller(listing: URLSearchParams): URLSearchParams {
+  const merged = new URLSearchParams(SAMPLE_REPORT_QUERY)
+  merged.delete("fullAddress") // the sample's address would otherwise title the report
+  merged.delete("savedReportId")
+  // An incomplete top row is blurred as a whole, so it takes the sample's values as filler.
+  const summaryIsFiller = previewSummaryIncomplete(listing)
+  listing.forEach((value, key) => {
+    if (summaryIsFiller && PREVIEW_SUMMARY_PARAMS.includes(key)) return
+    if (PREVIEW_CLEAR_PARAMS.has(key) || !isMissingParam(value)) merged.set(key, value)
+  })
+  return merged
+}
+
 export function ReportView({ query, snapshot }: ReportViewProps) {
   const urlParams = useSearchParams()
-  const searchParams = useMemo(() => (query !== undefined ? new URLSearchParams(query) : urlParams), [query, urlParams])
+  // A free preview whose listing couldn't be read (e.g. Rightmove blocked us): show the sample
+  // report, fully locked, rather than an error.
+  const previewFallback = query === undefined && urlParams.get("previewFallback") === "1"
+  const searchParams = useMemo(
+    () =>
+      query !== undefined
+        ? new URLSearchParams(query)
+        : previewFallback
+          ? new URLSearchParams(`${SAMPLE_REPORT_QUERY}&preview=1`)
+          : urlParams.get("preview") === "1"
+            ? withSampleFiller(urlParams)
+            : urlParams,
+    [query, previewFallback, urlParams]
+  )
   // "Today" for days on market and the asking-price year: fixed for a snapshot so it never drifts.
   const asOf = useMemo(() => (snapshot ? new Date(snapshot.asOf) : new Date()), [snapshot])
   const [isScrolled, setIsScrolled] = useState(false)
@@ -164,28 +225,38 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
   }
   const displayAddress = propertyData.fullAddress || propertyData.propertyAddress
 
+  // A free preview (no Pro) shows only Risks & restrictions for this property; every other
+  // section is locked and blurred, filled from the sample report so it costs no lookups.
+  const preview = !snapshot && searchParams.get("preview") === "1"
+  const frozen = snapshot ?? (preview ? SAMPLE_REPORT_SNAPSHOT : undefined)
   // In snapshot mode (the public sample) every hook gets empty inputs, so none of them
   // fetches, and the report reads the saved responses instead.
-  const live = !snapshot
+  const live = !frozen
   const lat = live ? propertyData.latitude : ""
   const lon = live ? propertyData.longitude : ""
   const outcode = live ? propertyData.houseOutcode : null
   const postcode = live ? propertyData.houseFullPostcode : null
-  const liveRisks = useRisksRestrictions(lat, lon, postcode)
+  // Risks & restrictions stays live in a preview: it's the part a free report shows unlocked.
+  const risksFrozen = snapshot ?? (previewFallback ? SAMPLE_REPORT_SNAPSHOT : undefined)
+  const liveRisks = useRisksRestrictions(
+    risksFrozen ? "" : propertyData.latitude,
+    risksFrozen ? "" : propertyData.longitude,
+    risksFrozen ? null : propertyData.houseFullPostcode
+  )
   const liveCensus = useCensusTenure(postcode)
   const liveDistrict = useDistrictComparison(outcode, propertyData.propertyType, lat, lon)
   const liveSupply = useSupplyDemand(outcode, propertyData.propertyType, lat, lon, live ? propertyData.rightmoveUrl : null)
   const liveNearby = useNearbyPlaces(live ? searchParams.get("nearbyPlaces") : null, lat, lon)
   const livePricePerSqm = usePricePerSqm(outcode, propertyData.propertyType)
 
-  const { data: riskData, loading: riskDataLoading } = snapshot ? { data: snapshot.risks, loading: false } : liveRisks
-  const { tenure: censusTenure, englandTenure: englandCensusTenure } = snapshot ? snapshot.census : liveCensus
-  const { districts: neighbourDistricts, salesTrend: districtSalesTrend, nearestSales, loading: districtLoading } = snapshot
-    ? { ...snapshot.district, loading: false }
+  const { data: riskData, loading: riskDataLoading } = risksFrozen ? { data: risksFrozen.risks, loading: false } : liveRisks
+  const { tenure: censusTenure, englandTenure: englandCensusTenure } = frozen ? frozen.census : liveCensus
+  const { districts: neighbourDistricts, salesTrend: districtSalesTrend, nearestSales, loading: districtLoading } = frozen
+    ? { ...frozen.district, loading: false }
     : liveDistrict
-  const { supplyDemand, nearestForSale, loading: supplyDemandLoading } = snapshot ? { ...snapshot.supplyDemand, loading: false } : liveSupply
-  const { places: dailyLifePlaces, fetching: nearbyLoading } = snapshot ? { places: snapshot.nearbyPlaces, fetching: false } : liveNearby
-  const { stats: pricePerSqmStats, loading: pricePerSqmLoading } = snapshot ? { stats: snapshot.pricePerSqm, loading: false } : livePricePerSqm
+  const { supplyDemand, nearestForSale, loading: supplyDemandLoading } = frozen ? { ...frozen.supplyDemand, loading: false } : liveSupply
+  const { places: dailyLifePlaces, fetching: nearbyLoading } = frozen ? { places: frozen.nearbyPlaces, fetching: false } : liveNearby
+  const { stats: pricePerSqmStats, loading: pricePerSqmLoading } = frozen ? { stats: frozen.pricePerSqm, loading: false } : livePricePerSqm
 
   const averagePriceByYearParam = searchParams.get('averagePriceByYear')
   let averagePriceByYear: Record<string, number> | null = null
@@ -1792,6 +1863,7 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
   const rankingChartBlock = rankingRows.length > 0 ? (
     <div>
       <div className="font-semibold">How the asking price compares, {latestNeighbourYear}</div>
+      <Locked>
       {rankingInsight && (
         <div className="mt-1" style={{ color: '#6B6B70' }}>{rankingInsight}</div>
       )}
@@ -1801,6 +1873,7 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
       <p className="mt-1.5 text-[12px]" style={{ color: '#6B6B70' }}>
         Average {propertyData.propertyType?.toLowerCase()} sold price by district.
       </p>
+      </Locked>
     </div>
   ) : null
 
@@ -1894,10 +1967,11 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
     backgroundDataLoaded,
     searchParams.get('savedReportId') ?? propertyData.rightmoveUrl ?? null,
     keyPoints,
-    snapshot?.insights ?? null
+    frozen?.insights ?? null
   )
 
   return (
+    <PreviewLock on={preview}>
     <div className="min-h-screen" style={{ backgroundColor: '#FBFAF7', position: 'relative' }}>
       <Navbar isScrolled={isScrolled} />
 
@@ -1916,7 +1990,11 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
           epcRating={propertyData.epcRating}
           constructionAgeBand={propertyData.constructionAgeBand}
           tenure={propertyData.tenure}
+          lockFacts={previewFallback}
+          lockDetails={preview}
+          lockSummary={preview && !previewFallback && previewSummaryIncomplete(urlParams)}
         />
+        {preview && <PreviewStrip risksUnlocked={!previewFallback} />}
         <section
           className="grid grid-cols-1 sm:grid-cols-12 gap-6 px-6 sm:px-12 py-[31px] border-t border-[#0B0B0C]"
           style={{ fontFamily: "var(--font-report-body)", fontSize: 14, color: "#0B0B0C" }}
@@ -1955,17 +2033,17 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
 
           {neighbourDistricts.length > 0 && neighbourDistricts.some((d) => d.yearly.length > 0) && (
             <div className="mt-10 pt-4 border-t" style={{ borderColor: "#0B0B0C" }}>
-              <div>
-                <div className="font-semibold">
-                  Average sold price, {propertyData.propertyType?.toLowerCase()} homes: {propertyData.houseOutcode} and its neighbours
-                </div>
+              <div className="font-semibold">
+                Average sold price, {propertyData.propertyType?.toLowerCase()} homes: {propertyData.houseOutcode} and its neighbours
+              </div>
+              <Locked soft>
                 {neighbourRankInsight && (
                   <div className="mt-1" style={{ color: '#6B6B70' }}>{neighbourRankInsight}</div>
                 )}
-              </div>
-              <div className="mt-4">
-                <NeighbourChart districts={neighbourDistricts} subjectOutcode={propertyData.houseOutcode || ''} />
-              </div>
+                <div className="mt-4">
+                  <NeighbourChart districts={neighbourDistricts} subjectOutcode={propertyData.houseOutcode || ''} />
+                </div>
+              </Locked>
               <p className="mt-1.5 text-[12px]" style={{ color: '#6B6B70' }}>
                 Average sold price, HM Land Registry.
               </p>
@@ -1977,6 +2055,7 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
               {pastSalesOnly.length > 0 && ruleContext.askingPrice !== null && (
                 <div>
                   <div className="font-semibold">This home&apos;s price history</div>
+                  <Locked>
                   {priceHistoryInsight && (
                     <div className="mt-1" style={{ color: '#6B6B70' }}>{priceHistoryInsight}</div>
                   )}
@@ -1991,6 +2070,7 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
                     <span>● Sold</span>
                     <span>○ Asking price (not a sale)</span>
                   </div>
+                  </Locked>
                 </div>
               )}
 
@@ -2021,7 +2101,7 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
           />
           {nearestForSale.length > 0 && (
             <div className="mt-10 pt-4 border-t" style={{ borderColor: "#0B0B0C" }}>
-              <NearestForSale listings={nearestForSale} propertyType={ruleContext.propertyType} linkToListings={!snapshot} />
+              <NearestForSale listings={nearestForSale} propertyType={ruleContext.propertyType} linkToListings={!frozen} />
             </div>
           )}
         </ReportSection>
@@ -2029,7 +2109,13 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
 
       <div className={`${interBody.variable} ${interTight.variable}`}>
         <ReportSection id="risks" number="03" title="What to check before you offer" subtitle="Risks & restrictions">
-          <RisksRestrictionsSection data={riskData} loading={riskDataLoading} linkDocuments={!snapshot} />
+          {previewFallback ? (
+            <Locked>
+              <RisksRestrictionsSection data={riskData} loading={false} linkDocuments={false} />
+            </Locked>
+          ) : (
+            <RisksRestrictionsSection data={riskData} loading={riskDataLoading} linkDocuments={!snapshot} />
+          )}
         </ReportSection>
       </div>
 
@@ -2527,6 +2613,63 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
       </div>
 
       <Footer />
+      {preview && (
+        <>
+          <div className="hidden h-16 [@media(hover:none)]:block" aria-hidden="true" />
+          <PreviewUnlockBar />
+        </>
+      )}
+    </div>
+    </PreviewLock>
+  )
+}
+
+/** Tells a free-preview visitor what they're looking at: what's unlocked, and how to get the rest. */
+function PreviewStrip({ risksUnlocked }: { risksUnlocked: boolean }) {
+  return (
+    <div
+      className="flex flex-col gap-4 border-t border-[#0B0B0C] bg-white px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-12"
+      style={{ fontFamily: "var(--font-report-body)", color: "#0B0B0C" }}
+    >
+      <p className="m-0 text-[15px] leading-[1.5]">
+        <span className="font-semibold">Free preview.</span>{" "}
+        {risksUnlocked ? (
+          <>
+            <a href="#risks" className="text-[#0A369D] no-underline hover:underline">
+              Risks &amp; restrictions
+            </a>{" "}
+            for this home is unlocked below. The rest of the report is part of HomeLens Pro.
+          </>
+        ) : (
+          <>The full report for this home is part of HomeLens Pro.</>
+        )}
+      </p>
+      <Link
+        href="/pricing"
+        onClick={() => posthog.capture("preview_unlock_clicked", { source: "preview_strip" })}
+        className="flex h-11 shrink-0 items-center justify-center rounded-none bg-[#0B0B0C] px-5 text-[14px] font-medium text-white no-underline hover:bg-[#2A2A2E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A369D]/60 focus-visible:ring-offset-2"
+      >
+        Unlock the full report from £{MONTHLY_PRICE} →
+      </Link>
+    </div>
+  )
+}
+
+/** Touch screens can't hover a locked section, so the preview keeps one unlock bar on screen. */
+function PreviewUnlockBar() {
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 hidden items-center justify-between gap-4 border-t border-[#0B0B0C] bg-white py-3 pl-4 pr-24 [@media(hover:none)]:flex"
+      style={{ fontFamily: "var(--font-report-body)", color: "#0B0B0C" }}
+    >
+      <p className="m-0 text-[14px] font-semibold leading-tight">Unlock the full report</p>
+      <Link
+        href="/pricing"
+        onClick={() => posthog.capture("preview_unlock_clicked", { source: "mobile_bar" })}
+        className="flex h-10 shrink-0 items-center rounded-none bg-[#0B0B0C] px-4 text-[14px] font-medium text-white no-underline"
+      >
+        See pricing →
+      </Link>
     </div>
   )
 }

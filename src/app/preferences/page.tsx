@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { ArrowRight, Info } from "lucide-react"
 import { useState, useEffect, type ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
-import { useLoginPopup } from "@/components/login-popup"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User } from "@supabase/supabase-js"
 import posthog from "posthog-js"
@@ -20,7 +19,6 @@ import {
 import { interBody, interTight } from "@/app/results/report-fonts"
 
 export default function PreferencesPage() {
-  const { openUpgradeLimit } = useLoginPopup()
   const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
@@ -67,19 +65,17 @@ export default function PreferencesPage() {
   const router = useRouter()
 
   const handleGenerateReport = async () => {
-    if (!user) {
-      posthog.capture("generate_report_redirect_pricing", { reason: "not_signed_in" })
-      router.push("/pricing")
-      return
-    }
     if (!value || value === initialText || value.trim() === '') {
       alert('Please enter a valid Rightmove URL')
       return
     }
 
+    // Anyone without Pro (or a free report left) gets the fast, mostly blurred preview.
+    let preview = !user
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (supabaseUrl && supabaseKey) {
+    if (user && supabaseUrl && supabaseKey) {
       const supabase = createBrowserClient(supabaseUrl, supabaseKey)
       const { data: profile } = await supabase
         .from("profiles")
@@ -87,11 +83,13 @@ export default function PreferencesPage() {
         .eq("id", user.id)
         .maybeSingle()
 
-      if (hasFreeReportLimitReached(profile, user.created_at)) {
-        posthog.capture("upgrade_limit_shown", { property_url: value.trim() })
-        openUpgradeLimit()
-        return
-      }
+      if (hasFreeReportLimitReached(profile, user.created_at)) preview = true
+    }
+    if (preview) {
+      posthog.capture("preview_report_started", {
+        property_url: value.trim(),
+        reason: user ? "no_pro" : "not_signed_in",
+      })
     }
 
     const payload: PendingReportPayload = {
@@ -120,6 +118,7 @@ export default function PreferencesPage() {
       locationSlider: 50,
       garageSlider,
       locationLabel: '',
+      preview,
     }
 
     sessionStorage.setItem(PENDING_REPORT_STORAGE_KEY, JSON.stringify(payload))
@@ -181,7 +180,11 @@ export default function PreferencesPage() {
               style={{ width: '100%', height: '46.08px', paddingRight: '56px', fontSize: '1.1rem', textIndent: '4%', border: '1px solid rgba(0, 0, 0, 0.2)', color: value === initialText ? 'rgba(0, 0, 0, 0.8)' : '#000000' }}
             />
             {error && (
-              <p className="text-sm mt-2 text-center font-black" style={{ fontWeight: 900, color: '#000000' }}>
+              <p
+                className={`text-sm mt-2 text-center font-medium ${interBody.variable}`}
+                style={{ color: '#000000', fontFamily: 'var(--font-report-body)' }}
+                role="alert"
+              >
                 {error}
               </p>
             )}

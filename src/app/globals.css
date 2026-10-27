@@ -107,7 +107,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Britti Sans', sans-serif;
+    font-family: var(--font-report-body), sans-serif;
     overflow-x: hidden;
     min-width: 0;
   }

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import type { KeyPoints } from "@/lib/rules-engine"
+import { Locked } from "./locked"
 
 const DISPLAY_FONT = "var(--font-report-display)"
 const BODY_FONT = "var(--font-report-body)"
@@ -36,6 +37,7 @@ export function KeyPointsTabs({ keyPoints, loading = false }: { keyPoints: KeyPo
           </button>
         ))}
       </div>
+      <Locked>
       {loading ? (
         <div aria-live="polite">
           <p className="mb-4 text-[12px]" style={{ color: "#6B6B70" }}>
@@ -70,6 +72,7 @@ export function KeyPointsTabs({ keyPoints, loading = false }: { keyPoints: KeyPo
           ))}
         </div>
       )}
+      </Locked>
     </div>
   )
 }
