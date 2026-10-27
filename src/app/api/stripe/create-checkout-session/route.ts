@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: plan === "lifetime" ? "payment" : "subscription",
-      allow_promotion_codes: plan === "monthly",
+      allow_promotion_codes: true,
       line_items: [{ price: priceId, quantity: 1 }],
       client_reference_id: user.id,
       customer_email: user.email ?? undefined,
