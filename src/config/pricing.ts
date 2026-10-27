@@ -16,8 +16,14 @@ export interface PricingTier {
   popular?: boolean;
 }
 
+/** Pro Monthly, in GBP. Stripe charges whatever STRIPE_PRO_PRICE_ID is set to: keep the two in step. */
+export const MONTHLY_PRICE = 14;
+
 /** Pro Lifetime, in GBP. Stripe charges whatever STRIPE_PRO_LIFETIME_PRICE_ID is set to: keep the two in step. */
 export const LIFETIME_PRICE = 37;
+
+/** Pre-Black-Friday lifetime price, shown struck through. Set to null when the offer ends. */
+export const LIFETIME_ORIGINAL_PRICE: number | null = 53;
 
 const PRO_FEATURES = [
   "50 property analyses/month",
@@ -32,13 +38,13 @@ export const TIERS: PricingTier[] = [
     name: "Pro Monthly",
     checkoutPlan: "monthly",
     price: {
-      monthly: 14,
-      yearly: 14,
+      monthly: MONTHLY_PRICE,
+      yearly: MONTHLY_PRICE,
     },
     priceLabel: "Per month",
     description: "Ideal for serious home buyers and investors",
     features: [...PRO_FEATURES, "Cancel anytime"],
-    cta: "Subscribe for £14/month",
+    cta: `Subscribe for £${MONTHLY_PRICE}/month`,
   },
   {
     id: "pro-lifetime",
