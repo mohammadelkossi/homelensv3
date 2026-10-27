@@ -1,6 +1,5 @@
 import type { ReactNode } from "react"
-import { Info } from "lucide-react"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { HelpTip } from "./help-tip"
 
 // Shared building blocks for the two tool pages (/calculator, /upfront-costs),
 // styled to match the rest of the site's Swiss/editorial design system: Inter
@@ -54,18 +53,7 @@ function FieldLabel({ htmlFor, label, help }: { htmlFor: string; label: string; 
       <label htmlFor={htmlFor} className="text-[12px]" style={{ color: MUTED, fontFamily: BODY_FONT }}>
         {label}
       </label>
-      {help ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button type="button" tabIndex={-1} className="transition-colors" style={{ color: "#9CA3AF" }} aria-label={`What is ${label}?`}>
-              <Info className="h-3.5 w-3.5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs">
-            <p>{help}</p>
-          </TooltipContent>
-        </Tooltip>
-      ) : null}
+      {help ? <HelpTip label={label} help={help} /> : null}
     </div>
   )
 }

@@ -23,21 +23,10 @@ const InputWithButton = React.forwardRef<HTMLInputElement, InputWithButtonProps>
           aria-label="Submit"
           onClick={onButtonClick}
           disabled={buttonDisabled}
-          className="absolute inline-flex items-center justify-center w-7 h-7 rounded-lg cursor-pointer transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ 
-            position: 'absolute', 
-            right: '8px', 
-            top: '50%', 
-            transform: 'translateY(-50%)', 
-            width: '28px', 
-            height: '28px', 
-            borderRadius: '0.5rem', 
-            backgroundColor: 'transparent', 
-            cursor: 'pointer',
-            zIndex: 10
-          }}
+          // 40px: a comfortable thumb target inside the 46px field.
+          className="absolute right-[3px] top-1/2 z-10 inline-flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none bg-[#0B0B0C] text-white transition-colors hover:bg-[#2A2A2E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A369D]/60 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-[#D4D4D8] disabled:text-[#6B6B70]"
         >
-          <ArrowRight className="w-4 h-4" style={{ color: '#808080' }} />
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     )

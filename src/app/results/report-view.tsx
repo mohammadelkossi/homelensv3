@@ -2597,7 +2597,7 @@ export function ReportView({ query, snapshot }: ReportViewProps) {
             </p>
           </div>
           <div className="sm:col-span-3 flex sm:justify-end">
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleShare}
                 className="px-5 h-11 font-medium text-sm whitespace-nowrap"
