@@ -176,7 +176,7 @@ export default function PreferencesPage() {
                 }
               }}
               buttonDisabled={!!error || !value || value === initialText}
-              className="rounded-none bg-white focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 py-0 leading-[46.08px]"
+              className="rounded-full bg-white focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 py-0 leading-[46.08px]"
               style={{ width: '100%', height: '46.08px', paddingRight: '56px', fontSize: '1.1rem', textIndent: '4%', border: '1px solid rgba(0, 0, 0, 0.2)', color: value === initialText ? 'rgba(0, 0, 0, 0.8)' : '#000000' }}
             />
             {error && (
