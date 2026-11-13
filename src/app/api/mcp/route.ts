@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import { authenticateConnectorRequest, createAdminClient } from "@/lib/connector/access"
-import { connectorOrigin } from "@/lib/connector/origin"
+import { connectorOrigin, CONNECTOR_SCOPE } from "@/lib/connector/origin"
 import { registerConnectorTools } from "@/lib/connector/tools"
 
 // The HomeLens connector for Claude and ChatGPT (a remote MCP server).
@@ -23,7 +23,7 @@ function unauthorized(request: Request): Response {
     status: 401,
     headers: {
       "Content-Type": "application/json",
-      "WWW-Authenticate": `Bearer resource_metadata="${metadata}"`,
+      "WWW-Authenticate": `Bearer resource_metadata="${metadata}", scope="${CONNECTOR_SCOPE}"`,
     },
   })
 }
